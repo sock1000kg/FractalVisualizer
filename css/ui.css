@@ -1,0 +1,165 @@
+/* === GENERAL RESET === */
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    color: white;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* === CONTROLS BAR (LEFT) === */
+#controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+
+    background: rgba(23, 23, 27, 0.8);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: 600;
+    font-family: inherit;
+    max-width: 100vw;
+    box-shadow: 0 0 10px #00000055;
+}
+
+/* === BUTTONS (Shared Style) === */
+#controls button,
+#advanced button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: 1em;
+    font-weight: 600;
+    font-family: inherit;
+}
+
+#controls button.toggled,
+#advanced button.toggled {
+    background-color: #000000;
+    color: white;
+}
+
+#controls button:focus-visible,
+#advanced button:focus-visible {
+    outline: 2px solid #ffffff55;
+}
+
+/* === ZOOM INPUT GROUP === */
+#controls .inputs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 1em;
+}
+
+/* === ADVANCED BOX (TOP RIGHT) === */
+#advanced {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 15;
+
+    background-color: rgba(23, 23, 27, 0.8);
+    padding: 14px;
+    border-radius: 6px;
+    max-width: 260px;
+    box-shadow: 0 0 10px #00000055;
+    font-size: 1em;
+    align-items: center
+}
+
+#advanced summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1em;
+    margin-bottom: 10px;
+    color: white;
+}
+
+#advanced .inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+#advanced label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.95em;
+    font-weight: 500;
+    color: white;
+}
+
+/* === INPUT FIELDS === */
+input[type="number"] {
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: none;
+    font-size: 0.95em;
+    font-family: inherit;
+    background-color: #ffffff0f;
+    color: white;
+}
+
+/* === SCROLLBAR for ADVANCED (just in case) === */
+#advanced::-webkit-scrollbar {
+    width: 6px;
+}
+#advanced::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: 3px;
+}
+
+/* === RESPONSIVE TWEAKS === */
+@media (max-width: 1280px) {
+    #controls {
+        padding: 8px 10px;
+        gap: 8px;
+        font-size: 0.95em;
+    }
+
+    #controls button,
+    #advanced button {
+        padding: 5px 10px;
+        font-size: 0.95em;
+    }
+
+    #controls .inputs {
+        padding: 5px 8px;
+        font-size: 0.95em;
+    }
+
+    #advanced {
+        padding: 12px;
+        max-width: 220px;
+        font-size: 0.95em;
+    }
+
+    #advanced .inputs {
+        gap: 10px;
+    }
+
+    #advanced label {
+        font-size: 0.9em;
+    }
+}
