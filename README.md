@@ -1,15 +1,14 @@
 # Fractal Visualizer
 [Live Demo](https://sock1000kg.github.io/FractalVisualizer/) (currently only works on PC)
 
-A canvas-based fractal visualizer built with HTML5 and JavaScript using the logic of the Julia set. Mess around to see all kinds of diffrent patterns and save your favourite fractals! Maybe zoom in and see the shapes in a whole different light, too! You can also mess with different colors and coordinates in the advanced settings. Have fun :)
+Fractal Visualizer is a canvas-based fractal visualizer built with HTML5 and JavaScript using the logic of the Julia set. Mess around to see all kinds of diffrent patterns and save your favourite fractals. Maybe zoom in and see the shapes in a whole different light, too! You can also mess with different colors and coordinates in the advanced settings to satisfy your creativity. Have fun :)
 
 ## Features
 - Interactive fractal drawing using mouse position and hue shifts
 - Zoom
 - Black and White mode
 - Download fractal images
-- Save presets
-- Delete the currently selected presets
+- Save and delete presets
 
 ## Screenshots
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
