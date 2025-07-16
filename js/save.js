@@ -71,13 +71,13 @@ export function loadSavedSettings(state, draw) {
         bwButton.classList.remove("toggled");
     }
 
-    if(state.simple != chosen.simple) {
+    if(state.simple !== chosen.simple && chosen.simple !== undefined) {
         const simpleButton = document.getElementById("simpleToggle");
         helpers.updatesimpleUI(simpleButton, state);
     }
     state.simple = chosen.simple;
 
-    if(!state.pause) {
+    if(!state.pause && chosen.pause !== undefined) {
         helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
     }
     state.pause = true;
