@@ -12,7 +12,9 @@ export function saveSettings(state) {
         hueBase: state.hueBase,
         hueSpeed: state.hueSpeed,
         bw: state.bw,
-        simple: state.simple
+        simple: state.simple,
+        offsetX: state.offsetX,
+        offsetY: state.offsetY,
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -50,6 +52,8 @@ export function loadSavedSettings(state, draw) {
     state.hueBase = chosen.hueBase;
     state.hueSpeed = chosen.hueSpeed;
     state.bw = chosen.bw;
+    state.offsetX = chosen.offsetX || -canvas.width / 2;
+    state.offsetY = chosen.offsetY || -canvas.height / 2;
 
      //Get input elements
     const zoomInput = document.getElementById("zoomInput");
