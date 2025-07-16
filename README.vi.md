@@ -1,14 +1,15 @@
 # Trình tạo ảnh Fractal
 [Demo](https://sock1000kg.github.io/FractalVisualizer/) (hiện tại chỉ hoạt động trên máy tính)
 
-Fractal Visualizer là một công cụ tạo fractal trên canvas được xây dựng bằng HTML5 và JavaScript, sử dụng logic của tập Julia. Bạn có thể khám phá vô số hình dạng khác nhau và lưu lại các fractal bạn yêu thích. Hãy thử phóng to để nhìn thấy chúng từ một góc nhìn hoàn toàn mới nữa nhé! Ngoài ra, bạn cũng có thể nghịch với màu sắc và tọa độ trong phần cài đặt nâng cao để thoả mãn trí tưởng tượng của mình. Chúc bạn vui vẻ :)
+Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, được xây dựng bằng HTML5 và JavaScript dựa trên logic của tập Julia. Bạn có thể khám phá vô số hoa văn đầy mê hoặc, phóng to để thấy các chi tiết tinh xảo, và lưu lại những fractal yêu thích. Hãy thử phóng to để nhìn thấy chúng từ một góc nhìn hoàn toàn mới nữa nhé! Ngoài ra, bạn cũng có thể tuỳ chình màu sắc trong phần "Cài đặt nâng cao" để thoả mãn trí tưởng tượng của mình. Chúc bạn vui vẻ :)
 
 ## Tính năng
 - Vẽ fractal theo vị trí chuột và sự thay đổi dải màu
 - Phó to/thu nhỏ
 - Chế độ đen trắng
 - Tải ảnh fractal về máy
-- Lưu và xoá dữ liệu của các fractal 
+- Lưu và xoá dữ liệu của các fractal
+- Mode "Simple" cho các máy yếu hơn
 
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />

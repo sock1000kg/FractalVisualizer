@@ -31,6 +31,10 @@ function setupButtons(canvas, state, draw) {
     let bwButton = document.getElementById("bwToggle");
     if(bwButton){
         bwButton.addEventListener("click", () => {
+            if(state.simple) {
+                alert("Cannot toggle B&W in Simple mode. Please disable Simple mode first.");
+                return;
+            }
             state.bw = !state.bw;
             helpers.updateBWUI(bwButton);
             draw();
@@ -92,6 +96,17 @@ function setupButtons(canvas, state, draw) {
             console.log("Delete button clicked");
         });
     }
+
+    //SIMPLE MODE BUTTON
+    let simpleButton = document.getElementById("simpleToggle");
+    if(simpleButton) {
+        simpleButton.addEventListener("click", () => {
+            state.simple = !state.simple;
+            helpers.updatesimpleUI(simpleButton, state);
+            draw();
+            console.log("Simple button clicked");
+        });
+    }
 }
 
 
@@ -138,6 +153,10 @@ function setupVariablesInputs (state, draw) {
     let hueBaseInput = document.getElementById("hueBaseInput");
     hueBaseInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
+            if (state.simple) {
+                alert("Please disable Simple mode first.");
+            }
+            
             let value = parseFloat(hueBaseInput.value);
             if (!isNaN(value)) {
                 value = Math.max(1, Math.min(1000, value));
@@ -152,6 +171,10 @@ function setupVariablesInputs (state, draw) {
     let hueSpeedInput = document.getElementById("hueSpeedInput");
     hueSpeedInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
+            if (state.simple) {
+                alert("Please disable Simple mode first."); 
+            }
+            
             let value = parseFloat(hueSpeedInput.value);
             if (!isNaN(value)) {
                 value = Math.max(1, Math.min(500, value));
@@ -223,16 +246,20 @@ function setupMouseTrack (canvas, state, draw) {
         }
 
         if(dragging){
-            const dx = e.clientX - lastX;
-            const dy = e.clientY - lastY;
-
-            state.offsetX -= dx;
-            state.offsetY -= dy;
-
-            lastX = e.clientX;
-            lastY = e.clientY;
-
-            draw();
+            drawScheduled = true;
+            requestAnimationFrame(() => {
+                const dx = e.clientX - lastX;
+                const dy = e.clientY - lastY;
+    
+                state.offsetX -= dx;
+                state.offsetY -= dy;
+    
+                lastX = e.clientX;
+                lastY = e.clientY;
+    
+                draw();
+                drawScheduled = false;
+            });
         }
     });
 

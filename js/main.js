@@ -21,6 +21,7 @@ const state = {
 
   //modes
   bw: false,
+  simple: false,
   pause: false,
 };
 

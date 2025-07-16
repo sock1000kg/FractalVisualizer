@@ -9,12 +9,30 @@ export function draw(canvas, state){
         for(let py = 0; py < canvas.height; py++){
             let zx = (px + state.offsetX) / state.zoom;
             let zy = (py + state.offsetY) / state.zoom;
-            const localMaxIter = state.bw ? 150 : 100;
 
+            let localMaxIter;
+            if (state.simple) {
+                localMaxIter = 70;
+            } 
+            else if (state.bw) {
+                localMaxIter = 150;
+            } 
+            else {
+                localMaxIter = 100;
+            }
             let iter = julia(zx, zy, state.c, localMaxIter);
+
+            if(state.simple){
+                let color = iter === localMaxIter ? 0 : 255 - Math.floor(iter * 255 / localMaxIter);
+
+                let i = (py * canvas.width + px) * 4;
+                data[i] = color; //R
+                data[i+1] = color; //G
+                data[i+2] = color; //B
+                data[i+3] = 255;
+            }
             //BLACK AND WHITE MODE
-            if(state.bw){
-                // SIMPLE BW: let color = iter === localMaxIter ? 0 : 255 - Math.floor(iter * 255 / localMaxIter);
+            else if(state.bw){
                 let shade;
                 if (iter === localMaxIter) {
                     shade = state.hueBase; // Center shade

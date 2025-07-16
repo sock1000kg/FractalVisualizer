@@ -24,3 +24,7 @@ export function updateHueBaseUI (hueBaseInput, state) {
 export function updateHueSpeedUI (hueSpeedInput, state) {
     hueSpeedInput.value = state.hueSpeed.toFixed(2);
 }
+export function updatesimpleUI(simpleButton, state) {
+    simpleButton.classList.toggle("toggled");
+    console.log("imple updated");
+}
