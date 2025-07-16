@@ -77,7 +77,7 @@ export function loadSavedSettings(state, draw) {
     }
     state.simple = chosen.simple;
 
-    if(!state.pause && chosen.pause !== undefined) {
+    if(!state.pause && state.pause !== undefined) {
         helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
     }
     state.pause = true;
