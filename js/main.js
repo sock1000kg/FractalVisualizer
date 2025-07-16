@@ -30,3 +30,5 @@ window.addEventListener("DOMContentLoaded", () => {
   draw(canvas, state);
 });
 console.log("Main script loaded");
+
+window.state = state;

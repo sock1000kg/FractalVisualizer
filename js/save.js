@@ -11,7 +11,8 @@ export function saveSettings(state) {
         c: { re: state.c.re, im: state.c.im },
         hueBase: state.hueBase,
         hueSpeed: state.hueSpeed,
-        bw: state.bw
+        bw: state.bw,
+        simple: state.simple
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -63,11 +64,18 @@ export function loadSavedSettings(state, draw) {
     helpers.updateCUI(cImInput, cReInput, state);
     helpers.updateHueBaseUI(hueBaseInput, state);
     helpers.updateHueSpeedUI(hueSpeedInput, state);
+
     if (state.bw) {
         bwButton.classList.add("toggled");
     } else {
         bwButton.classList.remove("toggled");
     }
+
+    if(state.simple != chosen.simple) {
+        const simpleButton = document.getElementById("simpleToggle");
+        helpers.updatesimpleUI(simpleButton, state);
+    }
+    state.simple = chosen.simple;
 
     if(!state.pause) {
         helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
