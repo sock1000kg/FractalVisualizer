@@ -1,4 +1,5 @@
 //Returns number of iterations for a point to escape
+//z = zx + i*zy
 export function julia(zx, zy, c, maxIter) {
 
     let x = zx, y = zy, iter = 0;

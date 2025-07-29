@@ -26,5 +26,5 @@ export function updateHueSpeedUI (hueSpeedInput, state) {
 }
 export function updatesimpleUI(simpleButton, state) {
     simpleButton.classList.toggle("toggled");
-    console.log("imple updated");
+    console.log("Simple updated");
 }

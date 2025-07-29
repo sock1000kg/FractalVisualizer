@@ -7,6 +7,7 @@ export function draw(canvas, state){
 
     for(let px = 0; px < canvas.width; px++){
         for(let py = 0; py < canvas.height; py++){
+            //zx, zy are the coordinates in the complex plane
             let zx = (px + state.offsetX) / state.zoom;
             let zy = (py + state.offsetY) / state.zoom;
 
