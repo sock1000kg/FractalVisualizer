@@ -16,10 +16,10 @@ export function draw(canvas, state){
                 localMaxIter = 70;
             } 
             else if (state.bw) {
-                localMaxIter = 150;
+                localMaxIter = 90;
             } 
             else {
-                localMaxIter = 100;
+                localMaxIter = 60;
             }
             let iter = julia(zx, zy, state.c, localMaxIter);
 
