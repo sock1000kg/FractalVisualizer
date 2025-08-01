@@ -78,13 +78,13 @@ export function loadSavedSettings(state, draw) {
     if(state.simple !== chosen.simple && chosen.simple !== undefined) {
         const simpleButton = document.getElementById("simpleToggle");
         helpers.updatesimpleUI(simpleButton, state);
+        state.simple = chosen.simple;
     }
-    state.simple = chosen.simple;
 
     if(!state.pause && state.pause !== undefined) {
+        state.pause = true;
         helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
     }
-    state.pause = true;
     draw();
 
     console.log(`Loaded setting "${selectedKey}":`, chosen);

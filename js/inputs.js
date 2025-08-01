@@ -245,7 +245,7 @@ function setupMouseTrack (canvas, state, draw) {
             });
         }
 
-        if(dragging){
+        if(dragging && !drawScheduled){
             drawScheduled = true;
             requestAnimationFrame(() => {
                 const dx = e.clientX - lastX;
