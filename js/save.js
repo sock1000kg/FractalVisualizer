@@ -25,7 +25,7 @@ export function saveSettings(state) {
 
 export function populateSavedDropdown() {
     const select = document.getElementById("savedSettingsSelect");
-    select.innerHTML = `<option value="">-- Saved Settings --</option>`; //clears list
+    select.innerHTML = `<option value="" disabled selected>-- Saved Settings --</option>`; //clears list
 
     //Populate dropdown with saved settings
     const saved = JSON.parse(localStorage.getItem("fractalPresets") || "{}");
