@@ -151,37 +151,39 @@ function setupVariablesInputs (state, draw) {
 
     //Hue Base
     let hueBaseInput = document.getElementById("hueBaseInput");
-    hueBaseInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            if (state.simple) {
-                alert("Please disable Simple mode first.");
-            }
-            
-            let value = parseFloat(hueBaseInput.value);
-            if (!isNaN(value)) {
-                value = Math.max(1, Math.min(1000, value));
-                state.hueBase = value;
-                helpers.updateHueBaseUI(hueBaseInput, state);
-                draw();
-            }
+    hueBaseInput.addEventListener("input", () => {
+        if (state.simple) {
+            alert("Please disable Simple mode first.");
+            hueBaseInput.value = state.hueBase; // revert change
+            return;
+        }
+        
+        let value = parseFloat(hueBaseInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(1, Math.min(1000, value));
+            state.hueBase = value;
+            hueBaseValue.textContent = value;
+            helpers.updateHueBaseUI(hueBaseInput, state);
+            draw();
         }
     });
 
     // Hue Speed
     let hueSpeedInput = document.getElementById("hueSpeedInput");
-    hueSpeedInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            if (state.simple) {
-                alert("Please disable Simple mode first."); 
-            }
-            
-            let value = parseFloat(hueSpeedInput.value);
-            if (!isNaN(value)) {
-                value = Math.max(1, Math.min(500, value));
-                state.hueSpeed = value;
-                helpers.updateHueSpeedUI(hueSpeedInput, state);
-                draw();
-            }
+    hueSpeedInput.addEventListener("input", () => {
+        if (state.simple) {
+            alert("Please disable Simple mode first.");
+            hueBaseInput.value = state.hueBase; // revert change
+            return;
+        }
+        
+        let value = parseFloat(hueSpeedInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(1, Math.min(500, value));
+            state.hueSpeed = value;
+            hueSpeedValue.textContent = value;
+            helpers.updateHueSpeedUI(hueSpeedInput, state);
+            draw();
         }
     });
 }
