@@ -5,7 +5,7 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 
 ## Tính năng
 - Vẽ fractal theo vị trí chuột và sự thay đổi dải màu
-- Phó to/thu nhỏ
+- Phóng to/thu nhỏ
 - Chế độ đen trắng
 - Tải ảnh fractal về máy
 - Lưu và xoá dữ liệu của các fractal
