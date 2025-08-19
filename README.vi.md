@@ -11,6 +11,11 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 - Lưu và xoá dữ liệu của các fractal
 - Mode "Simple" cho các máy yếu hơn
 
+## Tính năng trong tương lai
+- Vẽ fractal bằng WebGl (giảm lag)
+- Các loại fractal khác nhau
+- Cho phép người dùng thay đổi độ sâu của fractal
+
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
 <img width="1229" height="691" alt="fractal" src="https://github.com/user-attachments/assets/026eace9-b995-48d4-9472-30d1eff6de41" />
