@@ -1,5 +1,6 @@
 # Fractal Visualizer
 *(English | [Tiếng Việt](./README.vi.md))*
+
 [Live Demo](https://sock1000kg.github.io/FractalVisualizer/) (currently only works on PC)
 
 Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaScript using the Julia set. Explore a wide variety of mesmerizing patterns, zoom in to discover intricate details, and save your favorite fractals. Customize colors, coordinates, and more in the advanced settings to unleash your creativity. Have fun :)
