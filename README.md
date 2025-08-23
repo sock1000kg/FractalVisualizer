@@ -16,7 +16,7 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 ## Planned features
 - WebGL based rendering (reduce lag)
 - Different types of fractals
-- Allow users to control the fractal's depth (the number of iterations)
+- Allow users to control the fractal's depth (the number of iterations), Saturation, Lightness
 
 ## Screenshots
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
