@@ -52,6 +52,9 @@ const state = {
   saturation: 70, //HSL saturation % (color mode only)
   lightness: 50, //HSL lightness % (color mode only)
 
+  //smooth colouring: 0 = banded (the old look) .. 100 = fully smooth; applies to every mode
+  smoothness: 100,
+
   //fractal depth: max iterations per pixel, shared by every mode
   //(higher = more detail but slower to draw)
   maxIter: 60,

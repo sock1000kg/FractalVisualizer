@@ -220,6 +220,18 @@ function setupVariablesInputs (canvas, state, draw) {
         }
     });
 
+    //Smoothness (smooth colouring) - works in every mode, including Simple
+    let smoothInput = document.getElementById("smoothInput");
+    smoothInput.addEventListener("input", () => {
+        let value = parseFloat(smoothInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(0, Math.min(100, value));
+            state.smoothness = value;
+            helpers.updateSmoothnessUI(smoothInput, state);
+            draw();
+        }
+    });
+
     //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
     let saturationInput = document.getElementById("saturationInput");
     saturationInput.addEventListener("input", () => {

@@ -32,6 +32,10 @@ export function updateMaxIterUI (iterInput, state) {
     iterInput.value = state.maxIter;
     document.getElementById("iterValue").textContent = state.maxIter;
 }
+export function updateSmoothnessUI (smoothInput, state) {
+    smoothInput.value = state.smoothness;
+    document.getElementById("smoothValue").textContent = state.smoothness;
+}
 export function updateSaturationUI (saturationInput, state) {
     saturationInput.value = state.saturation;
     document.getElementById("saturationValue").textContent = state.saturation;

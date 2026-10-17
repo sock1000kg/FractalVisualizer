@@ -14,6 +14,7 @@ export function saveSettings(state) {
         maxIter: state.maxIter,
         saturation: state.saturation,
         lightness: state.lightness,
+        smoothness: state.smoothness,
         bw: state.bw,
         simple: state.simple,
         offsetX: state.offsetX,
@@ -61,6 +62,8 @@ export function loadSavedSettings(state, draw) {
     state.maxIter = chosen.maxIter ?? 60;
     state.saturation = chosen.saturation ?? 70;
     state.lightness = chosen.lightness ?? 50;
+    //presets saved before smooth colouring were banded, so 0 keeps them looking the same
+    state.smoothness = chosen.smoothness ?? 0;
     state.bw = chosen.bw;
     state.offsetX = chosen.offsetX || -canvas.width / 2;
     state.offsetY = chosen.offsetY || -canvas.height / 2;
@@ -74,6 +77,7 @@ export function loadSavedSettings(state, draw) {
     const iterInput = document.getElementById("iterInput");
     const saturationInput = document.getElementById("saturationInput");
     const lightnessInput = document.getElementById("lightnessInput");
+    const smoothInput = document.getElementById("smoothInput");
     const bwButton = document.getElementById("bwToggle");
     const fractalSelect = document.getElementById("fractalSelect");
 
@@ -86,6 +90,7 @@ export function loadSavedSettings(state, draw) {
     helpers.updateMaxIterUI(iterInput, state);
     helpers.updateSaturationUI(saturationInput, state);
     helpers.updateLightnessUI(lightnessInput, state);
+    helpers.updateSmoothnessUI(smoothInput, state);
 
     if (state.bw) {
         bwButton.classList.add("toggled");
