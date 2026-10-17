@@ -70,6 +70,8 @@ export function updateView3DUI(state) {
     document.getElementById("view3dToggle").classList.toggle("hidden", bulb);
     document.getElementById("heightLabel").classList.toggle("hidden", !state.view3d || bulb);
     document.getElementById("resetCamToggle").classList.toggle("hidden", !state.view3d && !bulb);
+    //the hint under the button shows with it
+    document.getElementById("camMoveHint").classList.toggle("hidden", !state.view3d && !bulb);
     document.getElementById("czLabel").classList.toggle("hidden", !bulb);
 }
 export function updateCzUI (czInput, state) {

@@ -44,7 +44,7 @@ import {COLOUR_UNIFORM_DECLS, COMMON_FUNCS, COLOR_FROM_T, COLOUR_UNIFORMS, setCo
 import {bulbBasis, clampCam, BULB_LIMITS} from './mat4.js';
 
 //camera lens: vertical field of view, in radians (the same lens as the terrain)
-const FOV_Y = 0.8;
+export const FOV_Y = 0.8;
 
 //Builds the FRAGMENT shader for one bulb type. glsl3d is its {init, drPlus} from the registry.
 export function bulbFragmentSource(glsl3d) {

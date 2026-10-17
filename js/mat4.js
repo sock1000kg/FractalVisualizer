@@ -95,26 +95,39 @@ export function lookAt(eye, target, up) {
 //Spherical coordinates turn these into a position: the horizontal circle has radius
 //dist * cos(pitch) (it shrinks as you look more from above), the height is dist * sin(pitch).
 export const CAM_TARGET = [0, 0.15, 0]; //a little above the ground, about the middle of the hills
-export const DEFAULT_CAM = {yaw: -0.6, pitch: 0.75, dist: 1.6};
+//target is the point the camera orbits and looks at. It starts at CAM_TARGET but Ctrl + middle-drag
+//can move it (see moveTarget), so it is part of the camera state; a copy keeps the constant safe.
+export const DEFAULT_CAM = {yaw: -0.6, pitch: 0.75, dist: 1.6, target: [...CAM_TARGET]};
 export const PITCH_MIN = 0.1; //never exactly level (the terrain would be a line) ...
 export const PITCH_MAX = 1.45; //... and never straight down (lookAt's "up" would be parallel to the view)
 export const DIST_MIN = 0.6;
 export const DIST_MAX = 4;
 
-//The limits of an orbit camera: pitch and distance ranges. The terrain and the bulbs have
+//The middle of a bulb (the bulbs live in the unit sphere around the origin)
+export const BULB_TARGET = [0, 0, 0];
+
+//The limits of an orbit camera: pitch and distance ranges, plus the box the moved target must
+//stay in (targetMin / targetMax) so the camera cannot wander off and get lost. `target` is the
+//default used when a camera state has none (e.g. an old preset). The terrain and the bulbs have
 //different framing, so each has its own set (the maths below is shared).
-export const TERRAIN_LIMITS = {pitchMin: PITCH_MIN, pitchMax: PITCH_MAX, distMin: DIST_MIN, distMax: DIST_MAX};
+export const TERRAIN_LIMITS = {
+    pitchMin: PITCH_MIN, pitchMax: PITCH_MAX, distMin: DIST_MIN, distMax: DIST_MAX,
+    target: CAM_TARGET, targetMin: [-1.5, -0.5, -1.5], targetMax: [1.5, 1.5, 1.5],
+};
 //A bulb is seen from every side, so the pitch may go (nearly) all the way over the poles.
 //The distance stops just outside the unit sphere (a bulb reaches out to about 1.2).
-export const BULB_LIMITS = {pitchMin: -1.45, pitchMax: 1.45, distMin: 1.02, distMax: 8};
+export const BULB_LIMITS = {
+    pitchMin: -1.45, pitchMax: 1.45, distMin: 1.02, distMax: 8,
+    target: BULB_TARGET, targetMin: [-3, -3, -3], targetMax: [3, 3, 3],
+};
 
 export function clampCam(cam, limits = TERRAIN_LIMITS) {
     cam.pitch = Math.max(limits.pitchMin, Math.min(limits.pitchMax, cam.pitch));
     cam.dist = Math.max(limits.distMin, Math.min(limits.distMax, cam.dist));
 }
 
-//the eye position for a camera state (orbiting `target`)
-export function orbitEye(cam, target = CAM_TARGET) {
+//the eye position for a camera state (orbiting `target`, by default the camera's own target)
+export function orbitEye(cam, target = cam.target ?? CAM_TARGET) {
     return [
         target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
         target[1] + cam.dist * Math.sin(cam.pitch),
@@ -124,7 +137,8 @@ export function orbitEye(cam, target = CAM_TARGET) {
 
 //the view matrix of an orbit camera
 export function orbitView(cam) {
-    return lookAt(orbitEye(cam), CAM_TARGET, [0, 1, 0]);
+    const target = cam.target ?? CAM_TARGET;
+    return lookAt(orbitEye(cam, target), target, [0, 1, 0]);
 }
 
 //THE BULB CAMERA: the Mandelbulb shader does not use matrices. It shoots one ray per pixel,
@@ -135,11 +149,40 @@ export function orbitView(cam) {
 //(the same axes lookAt builds above, but facing the other way: lookAt's z axis is -forward).
 //The shader then aims a pixel's ray along  forward + sx * right + sy * up,  where sx, sy
 //say how far the pixel is from the screen centre.
-export const BULB_TARGET = [0, 0, 0];
+//(the point it looks at is the camera's target, which starts at the middle of the bulb)
 export function bulbBasis(cam) {
-    const eye = orbitEye(cam, BULB_TARGET);
-    const forward = normalize(sub(BULB_TARGET, eye));
+    const target = cam.target ?? BULB_TARGET;
+    const eye = orbitEye(cam, target);
+    const forward = normalize(sub(target, eye));
     const right = normalize(cross(forward, [0, 1, 0]));
     const up = cross(right, forward);
     return {eye, forward, right, up};
+}
+
+//MOVE THE CAMERA (Ctrl + middle-drag): slide the target, and with it the whole orbit, sideways
+//and up/down as seen from the camera.
+//  dxPixels, dyPixels  how far the mouse moved on screen
+//  viewportHeight      the canvas height in pixels
+//  limits              TERRAIN_LIMITS or BULB_LIMITS (the box the target must stay in)
+//  fovY                the vertical field of view the renderer uses (radians)
+//At distance `dist` the camera sees a slice of the world 2 * dist * tan(fovY / 2) tall. That
+//slice fills viewportHeight pixels, so one pixel is worth
+//    scale = 2 * dist * tan(fovY / 2) / viewportHeight    world units.
+//With that scale the point under the cursor roughly follows the cursor.
+//Signs: dragging the mouse RIGHT should drag the scene right, which means the camera (and its
+//target) move LEFT, against the camera's right axis: target -= right * dx * scale.
+//Screen y grows DOWNWARD, so dragging DOWN drags the scene down, i.e. the camera moves UP:
+//target += up * dy * scale.
+//The basis is the same one bulbBasis builds (forward = target - eye).
+export function moveTarget(cam, dxPixels, dyPixels, viewportHeight, limits = TERRAIN_LIMITS, fovY = 0.8) {
+    const target = cam.target ?? limits.target;
+    const forward = normalize(sub(target, orbitEye(cam, target)));
+    const right = normalize(cross(forward, [0, 1, 0]));
+    const up = cross(right, forward);
+    const scale = 2 * cam.dist * Math.tan(fovY / 2) / viewportHeight;
+    const moved = [0, 1, 2].map((i) => {
+        const v = target[i] - right[i] * dxPixels * scale + up[i] * dyPixels * scale;
+        return Math.max(limits.targetMin[i], Math.min(limits.targetMax[i], v));
+    });
+    cam.target = moved; //a new array, so a target shared with a default/preset object is never mutated
 }

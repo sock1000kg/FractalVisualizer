@@ -36,7 +36,7 @@ import {perspective, orbitView, clampCam} from './mat4.js';
 //vertices per side of the grid (250 * 250 = 62,500 <= 65,536, so 16-bit indices work)
 export const GRID = 250;
 //camera lens: vertical field of view (radians) and the nearest / farthest drawn distance
-const FOV_Y = 0.8;
+export const FOV_Y = 0.8;
 const NEAR = 0.05;
 const FAR = 20;
 //the largest height, in terrain units, at Height slider 100: uHeight = slider / 100 * this

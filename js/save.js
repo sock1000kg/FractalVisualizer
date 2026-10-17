@@ -1,7 +1,7 @@
 import * as helpers from './helpers.js'
 import {getFractal} from './fractals.js';
 import {applyFractalDefaults} from './view.js';
-import {DEFAULT_CAM} from './mat4.js';
+import {DEFAULT_CAM, BULB_TARGET} from './mat4.js';
 
 export function saveSettings(state) {
     const saved = JSON.parse(localStorage.getItem("fractalPresets") || "{}"); //get existing presets or make a new one
@@ -25,9 +25,9 @@ export function saveSettings(state) {
         autoIter: state.autoIter,
         view3d: state.view3d,
         height3d: state.height3d,
-        cam3d: { yaw: state.cam3d.yaw, pitch: state.cam3d.pitch, dist: state.cam3d.dist },
+        cam3d: { yaw: state.cam3d.yaw, pitch: state.cam3d.pitch, dist: state.cam3d.dist, target: [...(state.cam3d.target ?? DEFAULT_CAM.target)] },
         cz: state.cz,
-        camBulb: { yaw: state.camBulb.yaw, pitch: state.camBulb.pitch, dist: state.camBulb.dist },
+        camBulb: { yaw: state.camBulb.yaw, pitch: state.camBulb.pitch, dist: state.camBulb.dist, target: [...(state.camBulb.target ?? BULB_TARGET)] },
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();

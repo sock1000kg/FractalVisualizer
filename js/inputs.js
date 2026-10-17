@@ -3,7 +3,9 @@ import {FRACTALS, getFractal, isRaymarch} from './fractals.js';
 import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
         parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
-import {DEFAULT_CAM, clampCam, BULB_LIMITS} from './mat4.js';
+import {DEFAULT_CAM, clampCam, moveTarget, TERRAIN_LIMITS, BULB_LIMITS} from './mat4.js';
+import {FOV_Y as TERRAIN_FOV_Y} from './terrainRenderer.js';
+import {FOV_Y as BULB_FOV_Y} from './bulbRenderer.js';
 
 //api = {render, renderPreview, precisionLimit, has3D, hasBulb}: render() draws the main canvas, renderPreview(p)
 //draws the inset (the partner of the current type; p is the complex point under the cursor,
@@ -92,6 +94,15 @@ function orbitBy(state, dxPixels, dyPixels) {
     cam.pitch += dyPixels * 0.005;
     if (bulb) clampCam(cam, BULB_LIMITS);
     else clampCam(cam);
+}
+
+//MOVE THE CAMERA (Ctrl + middle-drag): slide the camera's target (see moveTarget in mat4.js), so the
+//scene follows the cursor and later orbiting turns around the new point. Terrain and bulbs have
+//their own camera, limits and field of view; the maths is the same.
+function moveCameraBy(state, canvas, dxPixels, dyPixels) {
+    const bulb = isRaymarch(state.fractal);
+    if (bulb) moveTarget(state.camBulb, dxPixels, dyPixels, canvas.height, BULB_LIMITS, BULB_FOV_Y);
+    else moveTarget(state.cam3d, dxPixels, dyPixels, canvas.height, TERRAIN_LIMITS, TERRAIN_FOV_Y);
 }
 
 //PREVIEW CONTROLLER
@@ -474,7 +485,12 @@ function setupMouseTrack (canvas, state, draw, preview) {
     let downX = 0; //where the button went down, to tell a click from a drag
     let downY = 0;
     let panDrag = true; //3D only: this drag pans the region (Shift or right button) instead of orbiting
+    let moveDrag = false; //3D only: this drag moves the camera (Ctrl + middle button)
     canvas.addEventListener("mousedown", (e) => {
+        const is3D = state.view3d || isRaymarch(state.fractal);
+        //the middle button normally starts the browser's autoscroll; stop that in 3D only (2D is untouched)
+        if (e.button === 1 && is3D) e.preventDefault();
+        moveDrag = e.button === 1 && e.ctrlKey && is3D;
         dragging = true;
         panDrag = e.shiftKey || e.button === 2;
         lastX = e.clientX;
@@ -509,6 +525,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
     });
     window.addEventListener("mouseup", () => {
         dragging = false;
+        moveDrag = false;
     });
     //right-drag pans in 3D, so keep the browser's context menu away (2D keeps it)
     canvas.addEventListener("contextmenu", (e) => {
@@ -591,7 +608,9 @@ function setupMouseTrack (canvas, state, draw, preview) {
     
                 //3D: a plain drag orbits the camera; Shift / right drag pans the region like 2D.
                 //A bulb has no region to pan: every drag orbits.
-                if (isRaymarch(state.fractal) || (state.view3d && !panDrag)) orbitBy(state, dx, dy);
+                //Ctrl + middle-drag moves the camera instead (terrain and bulbs).
+                if (moveDrag) moveCameraBy(state, canvas, dx, dy);
+                else if (isRaymarch(state.fractal) || (state.view3d && !panDrag)) orbitBy(state, dx, dy);
                 else panBy(state, dx, dy);
     
                 lastX = e.clientX;
