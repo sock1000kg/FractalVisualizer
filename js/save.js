@@ -7,6 +7,7 @@ export function saveSettings(state) {
     if(!name) return;
 
     saved[name] = {
+        fractal: state.fractal,
         zoom: state.zoom,
         c: { re: state.c.re, im: state.c.im },
         hueBase: state.hueBase,
@@ -49,6 +50,8 @@ export function loadSavedSettings(state, draw) {
     const selectedKey = select.value;
     if(!chosen) return;
 
+    //presets saved before fractal types existed were all Julia
+    state.fractal = chosen.fractal ?? "julia";
     state.zoom = chosen.zoom;
     state.c.re = chosen.c.re;
     state.c.im = chosen.c.im;
@@ -73,8 +76,10 @@ export function loadSavedSettings(state, draw) {
     const saturationInput = document.getElementById("saturationInput");
     const lightnessInput = document.getElementById("lightnessInput");
     const bwButton = document.getElementById("bwToggle");
+    const fractalSelect = document.getElementById("fractalSelect");
 
     //Update UI (these helpers also refresh the value labels)
+    helpers.updateFractalUI(fractalSelect, state);
     helpers.updateZoomUI(zoomInput, state);
     helpers.updateCUI(cImInput, cReInput, state);
     helpers.updateHueBaseUI(hueBaseInput, state);

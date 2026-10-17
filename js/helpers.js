@@ -44,3 +44,7 @@ export function updatesimpleUI(simpleButton, state) {
     simpleButton.classList.toggle("toggled");
     console.log("Simple updated");
 }
+//keeps the type selector in sync with state.fractal (used after loading a preset)
+export function updateFractalUI(fractalSelect, state) {
+    fractalSelect.value = state.fractal;
+}
