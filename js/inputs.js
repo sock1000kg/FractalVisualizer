@@ -1,11 +1,12 @@
 import * as helpers from './helpers.js';
 import {FRACTALS} from './fractals.js';
-import {getViewCenter, setViewCenter, applyFractalDefaults} from './view.js';
+import {getViewCenter, setViewCenter, applyFractalDefaults, zoomAt} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
 
 export function setupInputs(canvas, state, draw){
     setupButtons(canvas, state, draw);
     setupMouseTrack(canvas, state, draw);
+    setupTouch(canvas, state, draw);
     setupVariablesInputs(canvas, state, draw);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
@@ -336,6 +337,100 @@ function setupMouseTrack (canvas, state, draw) {
         }
     });
 
+}
+
+//TOUCH (phones and tablets)
+//Pointer Events unify mouse, pen and touch. Each finger gets its own pointerId, so we can
+//follow several fingers at once. We only handle pointerType "touch"; the mouse keeps using
+//the mouse handlers above, so desktop behaviour is unchanged.
+//One finger: moves c (or pans when paused). Two fingers: pinch zoom + pan together.
+function setupTouch (canvas, state, draw) {
+    const touches = new Map(); //pointerId -> {x, y}: the fingers currently down (Map keeps insertion order)
+    let prev = null; //reference from the previous frame: {x, y} for 1 finger, {x, y, dist} for 2 fingers
+    let drawScheduled = false;
+    const cReInput = document.getElementById("cReInput");
+    const cImInput = document.getElementById("cImInput");
+    const zoomInput = document.getElementById("zoomInput");
+
+    //Summarise the active fingers (only the first two count): midpoint, and distance if there are two.
+    //Returns null when no finger is down.
+    function gesture() {
+        const pts = [...touches.values()].slice(0, 2);
+        if (pts.length === 0) return null;
+        if (pts.length === 1) return {n: 1, x: pts[0].x, y: pts[0].y, dist: 0};
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        return {n: 2, x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2, dist};
+    }
+
+    //Forget the old reference so the next move starts from where the fingers are now (no jump)
+    function resetReference() {
+        const g = gesture();
+        prev = g ? {n: g.n, x: g.x, y: g.y, dist: g.dist} : null;
+    }
+
+    function applyGesture() {
+        const g = gesture();
+        if (!g) return;
+        //finger count changed since the last frame (or first move): just re-anchor, don't move anything
+        if (!prev || prev.n !== g.n) {
+            prev = g;
+            return;
+        }
+
+        if (g.n === 1) {
+            if (!state.pause) {
+                //same mapping as the mouse hover
+                state.c.re = (g.x - canvas.width / 2) / state.baseZoom;
+                state.c.im = (g.y - canvas.height / 2) / state.baseZoom;
+                helpers.updateCUI(cImInput, cReInput, state);
+            } else {
+                //paused: drag to pan, like the mouse drag
+                state.offsetX -= g.x - prev.x;
+                state.offsetY -= g.y - prev.y;
+            }
+        } else {
+            //Pinch: scale the zoom by how much the fingers spread (dist / prevDist).
+            //Guard against prevDist === 0 (both fingers on the same pixel)
+            if (prev.dist > 0) {
+                zoomAt(canvas, state, g.x, g.y, state.zoom * (g.dist / prev.dist));
+                helpers.updateZoomUI(zoomInput, state);
+            }
+            //Also pan by how far the midpoint moved
+            state.offsetX -= g.x - prev.x;
+            state.offsetY -= g.y - prev.y;
+        }
+        prev = g;
+        draw();
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+        if (e.pointerType !== "touch") return;
+        e.preventDefault(); //stops the browser sending fake mouse events after the touch
+        canvas.setPointerCapture(e.pointerId); //keep receiving this finger's events even if it leaves the canvas
+        touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+        resetReference(); //finger count changed -> new reference
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+        if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
+        touches.set(e.pointerId, {x: e.clientX, y: e.clientY}); //always store the latest position
+        if (!drawScheduled) {
+            drawScheduled = true;
+            requestAnimationFrame(() => { //at most one update per screen refresh; uses the latest positions
+                drawScheduled = false;
+                applyGesture();
+            });
+        }
+    });
+
+    function endTouch(e) {
+        if (e.pointerType !== "touch") return;
+        touches.delete(e.pointerId);
+        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+        resetReference(); //e.g. 2 fingers -> 1: the remaining finger becomes the new start point
+    }
+    canvas.addEventListener("pointerup", endTouch);
+    canvas.addEventListener("pointercancel", endTouch);
 }
 
 function setupWindowResize (canvas, state, draw) {

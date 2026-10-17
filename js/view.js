@@ -31,3 +31,18 @@ export function applyFractalDefaults(canvas, state) {
     state.zoom = d.zoom; //zoom first: setViewCenter depends on it
     setViewCenter(canvas, state, d.center.re, d.center.im);
 }
+
+//zoom to newZoom while keeping the complex point under screen pixel (sx, sy) fixed.
+//Used by the pinch gesture: the point between the fingers stays between the fingers.
+//  1. find the complex number currently under the pixel:  re = (sx + offsetX) / zoom
+//  2. change the zoom
+//  3. pick the offset that puts the SAME number back under the pixel:
+//         (sx + offsetX') / newZoom = re   =>   offsetX' = re * newZoom - sx
+//(getViewCenter/setViewCenter do the same thing for the fixed point (width/2, height/2))
+export function zoomAt(canvas, state, sx, sy, newZoom) {
+    const re = (sx + state.offsetX) / state.zoom;
+    const im = (sy + state.offsetY) / state.zoom;
+    state.zoom = newZoom;
+    state.offsetX = re * newZoom - sx;
+    state.offsetY = im * newZoom - sy;
+}
