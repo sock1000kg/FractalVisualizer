@@ -36,6 +36,10 @@ export function updateSmoothnessUI (smoothInput, state) {
     smoothInput.value = state.smoothness;
     document.getElementById("smoothValue").textContent = state.smoothness;
 }
+export function updatePowerUI (powerInput, state) {
+    powerInput.value = state.power;
+    document.getElementById("powerValue").textContent = state.power.toFixed(1);
+}
 export function updateSaturationUI (saturationInput, state) {
     saturationInput.value = state.saturation;
     document.getElementById("saturationValue").textContent = state.saturation;

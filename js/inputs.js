@@ -232,6 +232,18 @@ function setupVariablesInputs (canvas, state, draw) {
         }
     });
 
+    //Power n of z -> z^n + k - works in every mode and for every fractal type
+    let powerInput = document.getElementById("powerInput");
+    powerInput.addEventListener("input", () => {
+        let value = parseFloat(powerInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(2, Math.min(8, value));
+            state.power = value;
+            helpers.updatePowerUI(powerInput, state);
+            draw();
+        }
+    });
+
     //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
     let saturationInput = document.getElementById("saturationInput");
     saturationInput.addEventListener("input", () => {

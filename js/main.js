@@ -55,6 +55,9 @@ const state = {
   //smooth colouring: 0 = banded (the old look) .. 100 = fully smooth; applies to every mode
   smoothness: 100,
 
+  //power n of the iteration z -> z^n + k: 2 (the classic look) .. 8, fractional values allowed
+  power: 2,
+
   //fractal depth: max iterations per pixel, shared by every mode
   //(higher = more detail but slower to draw)
   maxIter: 60,
