@@ -29,15 +29,12 @@ void main() {
 //used for deep zoom; see the big comment above DD_LIB). Everything that does not depend on
 //the number format is written once here and pasted into both.
 
-//precision line + the uniforms both shaders share (the colour settings and the power)
-const COMMON_HEAD = `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-
+//The uniforms every shader that colours a point shares (the colour settings, the iteration
+//limit and the power). Split from the precision line so the 3D terrain VERTEX shader, which
+//does the colouring too, can reuse it (a vertex shader has its own precision rules).
+export const COLOUR_UNIFORM_DECLS = `
 uniform vec2 uResolution; // canvas size in pixels
+uniform int uMaxIter;     // state.maxIter
 uniform float uHueBase;
 uniform float uHueSpeed;
 uniform float uSat;       // 0..100
@@ -47,20 +44,26 @@ uniform float uSmooth;    // state.smoothness / 100: 0 = banded, 1 = fully smoot
 uniform float uPower;     // state.power: the n in z -> z^n + k
 `;
 
-//helper functions both shaders use: the smooth-colouring constants, cpow and hslToRgb
-const COMMON_FUNCS = `
+//precision line + the shared uniforms, for a FRAGMENT shader.
+//SAFE_LOG2: a step must not make |z|^2 overflow, so we stop when log2|z| * n > SAFE_LOG2
+//(log2 of the |z| the next step would give). highp floats reach about 1e38 = 2^126, so
+//|z|^2 < 2^120 is safe with 60. mediump overflows past about 65000 = 2^16, so
+//|z|^2 < 2^14 needs 7.
+const COMMON_HEAD = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#define SAFE_LOG2 60.0
+#else
+precision mediump float;
+#define SAFE_LOG2 7.0
+#endif
+` + COLOUR_UNIFORM_DECLS;
+
+//helper functions both shaders use: the smooth-colouring constant, cpow and hslToRgb
+export const COMMON_FUNCS = `
 // Extra steps run after a point escapes (see smoothValue in fractals.js).
 // At most 3 are run; they also stop early when |z| gets too big (see SAFE_LOG2).
 #define SMOOTH_EXTRA 3
-// A step must not make |z|^2 overflow, so we stop when log2|z| * n > SAFE_LOG2
-// (log2 of the |z| the next step would give). highp floats reach about 1e38 = 2^126, so
-// |z|^2 < 2^120 is safe with 60. mediump overflows past about 65000 = 2^16, so
-// |z|^2 < 2^14 needs 7.
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-#define SAFE_LOG2 60.0
-#else
-#define SAFE_LOG2 7.0
-#endif
 
 // z^n for a real n (same as power() in fractals.js; read the polar-form and seam
 // explanation there). z = r*(cos t + i*sin t) gives z^n = r^n*(cos nt + i*sin nt),
@@ -99,12 +102,17 @@ vec3 hslToRgb(float h, float s, float l) {
 }
 `;
 
-//Everything AFTER the escape loop: smooth colouring, then the colour modes. It needs the
-//variables iter (int), z and k (vec2, plain floats) to exist. `step` is the fractal's float
-//step snippet (once a point has escaped |z| > 2, so float precision is enough for the extra
-//steps even in the deep shader).
-function tailSource(step) {
+//The colouring of one point, as a GLSL FUNCTION: smooth colouring, then the colour modes.
+//Both the 2D fragment shaders and the 3D terrain vertex shader call it, so a point gets the
+//same colour in 2D and in 3D. It takes iter (int, the escape count; uMaxIter = inside the
+//set) and z, k (vec2, plain floats) as left by the escape loop, returns the rgb colour in
+//0..255, and also returns the smooth iteration value t through the `out` parameter (the 3D
+//height is made from it). `step` is the fractal's float step snippet (once a point has
+//escaped |z| > 2, so float precision is enough for the extra steps even in the deep shader).
+//z and k are copies here (GLSL passes by value), so the extra steps never touch the caller's.
+export function colorizeSource(step) {
     return `
+vec3 colorize(int iter, vec2 z, vec2 k, out float t) {
     // SMOOTH COLOURING (full explanation at smoothValue in fractals.js).
     // The integer iter makes colour bands. For escaped points we run a few more
     // steps so |z| is large, then nu = iter + extraDone - ln(log2|z|) / ln n is a
@@ -112,7 +120,7 @@ function tailSource(step) {
     // outer log is base n because each step multiplies ln|z| by n).
     // uSmooth blends: t = iter (bands) .. nu (smooth).
     float fi = float(iter);
-    float t = fi;
+    t = fi;
     bool inside = (iter == uMaxIter);
     if (!inside) {
         int extraDone = 0;
@@ -150,11 +158,19 @@ function tailSource(step) {
     }
 
     // The CPU's Uint8ClampedArray clamps to 0..255, so do the same here
-    rgb = clamp(rgb, 0.0, 255.0);
-    gl_FragColor = vec4(rgb / 255.0, 1.0);
+    return clamp(rgb, 0.0, 255.0);
 }
 `;
 }
+
+//The end of both 2D fragment shaders' main(): colour the point the escape loop ended on
+//(it needs the variables iter, z and k to exist) and write it out.
+const FRAGMENT_TAIL = `
+    float t; // the smooth value; only the 3D terrain uses it
+    vec3 rgb = colorize(iter, z, k, t);
+    gl_FragColor = vec4(rgb / 255.0, 1.0);
+}
+`;
 
 //Builds the FLOAT fragment shader source for one fractal type.
 //init / step are the GLSL snippets from the FRACTALS registry.
@@ -166,7 +182,7 @@ function fragmentSource(glsl) {
 uniform vec2 uCenter;
 uniform float uZoom;
 uniform vec2 uC;          // state.c as (re, im)
-` + COMMON_FUNCS + `
+` + COMMON_FUNCS + colorizeSource(glsl.step) + `
 void main() {
     // gl_FragCoord is the pixel being shaded. Its y axis points UP and pixel
     // centres sit at .5, while the CPU renderer counts y DOWN from the top
@@ -193,7 +209,7 @@ void main() {
         iter++;
     }
 
-` + tailSource(glsl.step);
+` + FRAGMENT_TAIL;
 }
 
 //DOUBLE-FLOAT ("dd") ARITHMETIC
@@ -352,7 +368,7 @@ uniform float uInvZoom;   // 1 / state.zoom
 uniform vec2 uCHi;        // state.c split the same way
 uniform vec2 uCLo;
 uniform int uPowerInt;    // the power as a whole number (dd is only used for whole powers)
-` + DD_LIB + COMMON_FUNCS + `
+` + DD_LIB + COMMON_FUNCS + colorizeSource(floatStep) + `
 void main() {
     // pixel number (see the float shader for why this conversion)
     float px = floor(gl_FragCoord.x);
@@ -385,7 +401,7 @@ void main() {
     // grows), so drop to plain floats (hi parts) and reuse the float smooth-colouring code.
     vec2 z = Z.xz;
     vec2 k = K.xz;
-` + tailSource(floatStep);
+` + FRAGMENT_TAIL;
 }
 
 //SELF-TEST. Some GPU drivers reassociate or fuse float maths and delete the error terms even
@@ -426,7 +442,7 @@ function splitDouble(x) {
 const DD_MIN_MAGNIFICATION = 1e4;
 //Warning limits (see limitFor): the dd shader holds to about 1e11 (48 bits), float to 1e5.
 const DD_LIMIT = 1e11;
-const FLOAT_LIMIT = 1e5;
+export const FLOAT_LIMIT = 1e5;
 
 //true when n is a whole number (the dd shader can only do whole powers; see cdPowInt)
 function isWholePower(n) {
@@ -434,7 +450,7 @@ function isWholePower(n) {
 }
 
 //Compiles one shader and throws (after logging) if it fails
-function compile(gl, type, source) {
+export function compile(gl, type, source) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
@@ -447,7 +463,7 @@ function compile(gl, type, source) {
 }
 
 //Links a vertex + fragment shader into a program and throws if it fails
-function link(gl, vertexShader, fragmentShader) {
+export function link(gl, vertexShader, fragmentShader) {
     const program = gl.createProgram();
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
@@ -458,6 +474,26 @@ function link(gl, vertexShader, fragmentShader) {
         throw new Error("Program link error: " + log);
     }
     return program;
+}
+
+//The names of the uniforms declared by COLOUR_UNIFORM_DECLS (looked up once per program)
+export const COLOUR_UNIFORMS = ["uResolution", "uMaxIter", "uHueBase", "uHueSpeed", "uSat",
+                                "uLight", "uMode", "uSmooth", "uPower"];
+
+//Sets those uniforms from the state. `u` maps each name to its location. Shared by the 2D
+//renderer below and the 3D terrain renderer.
+export function setColourUniforms(gl, canvas, u, state) {
+    //same priority as colors.js: simple > bw > colour
+    const mode = state.simple ? 2 : (state.bw ? 1 : 0);
+    gl.uniform2f(u.uResolution, canvas.width, canvas.height);
+    gl.uniform1i(u.uMaxIter, state.maxIter);
+    gl.uniform1f(u.uHueBase, state.hueBase);
+    gl.uniform1f(u.uHueSpeed, state.hueSpeed);
+    gl.uniform1f(u.uSat, state.saturation);
+    gl.uniform1f(u.uLight, state.lightness);
+    gl.uniform1i(u.uMode, mode);
+    gl.uniform1f(u.uSmooth, state.smoothness / 100);
+    gl.uniform1f(u.uPower, state.power);
 }
 
 //Sets up WebGL on the canvas and returns {draw, limitFor}:
@@ -486,8 +522,6 @@ export function createGLRenderer(canvas, gl) {
     //lazily on first use. Each entry is { program, uniforms, aPos }.
     const cache = {};
 
-    const COLOUR_UNIFORMS = ["uResolution", "uMaxIter", "uHueBase", "uHueSpeed", "uSat",
-                             "uLight", "uMode", "uSmooth", "uPower"];
     const FLOAT_UNIFORMS = ["uCenter", "uZoom", "uC"];
     const DD_UNIFORMS = ["uCenterHi", "uCenterLo", "uInvZoom", "uCHi", "uCLo", "uPowerInt", "uOne"];
 
@@ -556,21 +590,6 @@ export function createGLRenderer(canvas, gl) {
         return ddUsable(state) ? DD_LIMIT : FLOAT_LIMIT;
     }
 
-    //Sets the uniforms both shaders share
-    function setCommonUniforms(u, state) {
-        //same priority as colors.js: simple > bw > colour
-        const mode = state.simple ? 2 : (state.bw ? 1 : 0);
-        gl.uniform2f(u.uResolution, canvas.width, canvas.height);
-        gl.uniform1i(u.uMaxIter, state.maxIter);
-        gl.uniform1f(u.uHueBase, state.hueBase);
-        gl.uniform1f(u.uHueSpeed, state.hueSpeed);
-        gl.uniform1f(u.uSat, state.saturation);
-        gl.uniform1f(u.uLight, state.lightness);
-        gl.uniform1i(u.uMode, mode);
-        gl.uniform1f(u.uSmooth, state.smoothness / 100);
-        gl.uniform1f(u.uPower, state.power);
-    }
-
     function draw(state) {
         //the drawing area must match the canvas size, so resizes work
         gl.viewport(0, 0, canvas.width, canvas.height);
@@ -598,7 +617,7 @@ export function createGLRenderer(canvas, gl) {
         gl.vertexAttribPointer(p.aPos, 2, gl.FLOAT, false, 0, 0);
 
         const u = p.uniforms;
-        setCommonUniforms(u, state);
+        setColourUniforms(gl, canvas, u, state);
         if (deep) {
             const [reHi, reLo] = splitDouble(state.center.re);
             const [imHi, imLo] = splitDouble(state.center.im);
