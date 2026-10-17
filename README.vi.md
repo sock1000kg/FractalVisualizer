@@ -7,7 +7,8 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 
 ## Tính năng
 - Vẽ fractal theo vị trí chuột và sự thay đổi dải màu
-- Phóng to/thu nhỏ
+- Phóng to/thu nhỏ: ô Zoom hiển thị độ phóng đại (1× là chế độ xem mặc định của từng loại), tối đa 10¹⁵× với bộ vẽ CPU. Con lăn chuột phóng to về phía con trỏ, và bạn có thể gõ giá trị như `2.5` hoặc `1e9` vào ô (chấp nhận ký hiệu khoa học). Một dòng cảnh báo hiện ra khi độ phóng đại vượt quá mức bộ vẽ hiện tại còn vẽ chính xác được (khoảng 10⁵× với WebGL, 10¹³× với CPU); phóng sâu bằng WebGL sẽ có ở bản cập nhật tiếp theo. Dùng `?renderer=cpu` để đi sâu hơn trong lúc này
+- Số lần lặp lên đến 5000 (thanh trượt theo thang logarit) và tuỳ chọn "Auto iterations" tự tăng số lần lặp khi bạn phóng to
 - Chế độ đen trắng
 - Tải ảnh fractal về máy
 - Lưu và xoá dữ liệu của các fractal
