@@ -17,7 +17,7 @@ import {magnification} from './view.js';
 
 //Vertex shader: just passes the quad's corners straight through.
 //aPos is already in clip space (-1..1 on both axes), so no maths needed.
-const VERTEX_SRC = `
+export const VERTEX_SRC = `
 attribute vec2 aPos;
 void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
@@ -102,8 +102,39 @@ vec3 hslToRgb(float h, float s, float l) {
 }
 `;
 
-//The colouring of one point, as a GLSL FUNCTION: smooth colouring, then the colour modes.
-//Both the 2D fragment shaders and the 3D terrain vertex shader call it, so a point gets the
+//COLOUR FROM A SINGLE NUMBER t, as a GLSL function. This is the last half of colorize below,
+//split out so a shader that has no escape loop of its own can reuse it: the 3D Mandelbulb
+//shader (bulbRenderer.js) feeds it a number made from its orbit trap. t plays the role of the
+//smooth iteration count; `inside` marks a point that never escaped (it gets the flat colour).
+//Returns the rgb colour in 0..255. Keep in sync with colors.js (same modes, same priority:
+//simple > bw > colour).
+export const COLOR_FROM_T = `
+vec3 colorFromT(float t, bool inside) {
+    float maxIter = float(uMaxIter);
+    vec3 rgb;
+
+    if (uMode == 2) {
+        // simple: greyscale, inside the set is black.
+        // The tiny 0.001 stops a GPU division like 2.9999999 flooring to 2.
+        float v = inside ? 0.0 : 255.0 - floor(t * 255.0 / maxIter + 0.001);
+        rgb = vec3(v);
+    } else if (uMode == 1) {
+        // black and white
+        float shade = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 256.0);
+        rgb = vec3(255.0 - floor(shade)); // can go below 0 (hueBase up to 1000)
+    } else {
+        // colour
+        float hue = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 360.0);
+        rgb = hslToRgb(hue, uSat, uLight);
+    }
+
+    // The CPU's Uint8ClampedArray clamps to 0..255, so do the same here
+    return clamp(rgb, 0.0, 255.0);
+}
+`;
+
+//The colouring of one point, as a GLSL FUNCTION: smooth colouring, then colorFromT (the colour
+//modes). Both the 2D fragment shaders and the 3D terrain vertex shader call it, so a point gets the
 //same colour in 2D and in 3D. It takes iter (int, the escape count; uMaxIter = inside the
 //set) and z, k (vec2, plain floats) as left by the escape loop, returns the rgb colour in
 //0..255, and also returns the smooth iteration value t through the `out` parameter (the 3D
@@ -111,7 +142,7 @@ vec3 hslToRgb(float h, float s, float l) {
 //escaped |z| > 2, so float precision is enough for the extra steps even in the deep shader).
 //z and k are copies here (GLSL passes by value), so the extra steps never touch the caller's.
 export function colorizeSource(step) {
-    return `
+    return COLOR_FROM_T + `
 vec3 colorize(int iter, vec2 z, vec2 k, out float t) {
     // SMOOTH COLOURING (full explanation at smoothValue in fractals.js).
     // The integer iter makes colour bands. For escaped points we run a few more
@@ -138,27 +169,7 @@ vec3 colorize(int iter, vec2 z, vec2 k, out float t) {
         t = fi + uSmooth * (nu - fi);
     }
 
-    // Keep in sync with colors.js (same modes, same priority: simple > bw > colour).
-    float maxIter = float(uMaxIter);
-    vec3 rgb;
-
-    if (uMode == 2) {
-        // simple: greyscale, inside the set is black.
-        // The tiny 0.001 stops a GPU division like 2.9999999 flooring to 2.
-        float v = inside ? 0.0 : 255.0 - floor(t * 255.0 / maxIter + 0.001);
-        rgb = vec3(v);
-    } else if (uMode == 1) {
-        // black and white
-        float shade = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 256.0);
-        rgb = vec3(255.0 - floor(shade)); // can go below 0 (hueBase up to 1000)
-    } else {
-        // colour
-        float hue = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 360.0);
-        rgb = hslToRgb(hue, uSat, uLight);
-    }
-
-    // The CPU's Uint8ClampedArray clamps to 0..255, so do the same here
-    return clamp(rgb, 0.0, 255.0);
+    return colorFromT(t, inside);
 }
 `;
 }

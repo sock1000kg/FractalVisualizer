@@ -101,21 +101,45 @@ export const PITCH_MAX = 1.45; //... and never straight down (lookAt's "up" woul
 export const DIST_MIN = 0.6;
 export const DIST_MAX = 4;
 
-export function clampCam(cam) {
-    cam.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, cam.pitch));
-    cam.dist = Math.max(DIST_MIN, Math.min(DIST_MAX, cam.dist));
+//The limits of an orbit camera: pitch and distance ranges. The terrain and the bulbs have
+//different framing, so each has its own set (the maths below is shared).
+export const TERRAIN_LIMITS = {pitchMin: PITCH_MIN, pitchMax: PITCH_MAX, distMin: DIST_MIN, distMax: DIST_MAX};
+//A bulb is seen from every side, so the pitch may go (nearly) all the way over the poles.
+//The distance stops just outside the unit sphere (a bulb reaches out to about 1.2).
+export const BULB_LIMITS = {pitchMin: -1.45, pitchMax: 1.45, distMin: 1.02, distMax: 8};
+
+export function clampCam(cam, limits = TERRAIN_LIMITS) {
+    cam.pitch = Math.max(limits.pitchMin, Math.min(limits.pitchMax, cam.pitch));
+    cam.dist = Math.max(limits.distMin, Math.min(limits.distMax, cam.dist));
 }
 
-//the eye position for a camera state
-export function orbitEye(cam) {
+//the eye position for a camera state (orbiting `target`)
+export function orbitEye(cam, target = CAM_TARGET) {
     return [
-        CAM_TARGET[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
-        CAM_TARGET[1] + cam.dist * Math.sin(cam.pitch),
-        CAM_TARGET[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw),
+        target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
+        target[1] + cam.dist * Math.sin(cam.pitch),
+        target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw),
     ];
 }
 
 //the view matrix of an orbit camera
 export function orbitView(cam) {
     return lookAt(orbitEye(cam), CAM_TARGET, [0, 1, 0]);
+}
+
+//THE BULB CAMERA: the Mandelbulb shader does not use matrices. It shoots one ray per pixel,
+//so all it needs is where the eye is and the camera's three axes as plain vectors:
+//  forward  the direction the camera looks (from the eye to the middle of the bulb)
+//  right    the camera's right    = forward x up
+//  up       the camera's true up  = right x forward  (perpendicular to both)
+//(the same axes lookAt builds above, but facing the other way: lookAt's z axis is -forward).
+//The shader then aims a pixel's ray along  forward + sx * right + sy * up,  where sx, sy
+//say how far the pixel is from the screen centre.
+export const BULB_TARGET = [0, 0, 0];
+export function bulbBasis(cam) {
+    const eye = orbitEye(cam, BULB_TARGET);
+    const forward = normalize(sub(BULB_TARGET, eye));
+    const right = normalize(cross(forward, [0, 1, 0]));
+    const up = cross(right, forward);
+    return {eye, forward, right, up};
 }
