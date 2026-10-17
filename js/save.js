@@ -1,5 +1,6 @@
 import * as helpers from './helpers.js'
 import {getFractal} from './fractals.js';
+import {DEFAULT_CAM} from './mat4.js';
 
 export function saveSettings(state) {
     const saved = JSON.parse(localStorage.getItem("fractalPresets") || "{}"); //get existing presets or make a new one
@@ -21,6 +22,9 @@ export function saveSettings(state) {
         simple: state.simple,
         center: { re: state.center.re, im: state.center.im },
         autoIter: state.autoIter,
+        view3d: state.view3d,
+        height3d: state.height3d,
+        cam3d: { yaw: state.cam3d.yaw, pitch: state.cam3d.pitch, dist: state.cam3d.dist },
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -72,6 +76,11 @@ export function loadSavedSettings(state, draw) {
     state.power = chosen.power ?? 2;
     state.bw = chosen.bw;
     state.autoIter = chosen.autoIter ?? false; //older presets have no Auto iterations
+    //3D terrain: presets saved before it existed open in 2D. A preset saved in 3D opens in 2D
+    //when 3D is not available here (its button is disabled, e.g. on the CPU renderer).
+    state.view3d = (chosen.view3d ?? false) && !document.getElementById("view3dToggle").disabled;
+    state.height3d = chosen.height3d ?? 35;
+    state.cam3d = { ...DEFAULT_CAM, ...chosen.cam3d };
     //Where the view sits. New presets store the centre directly. Presets saved before that
     //stored pixel offsets (offset = centre * zoom - size/2), so convert back:
     //    centre = (offset + size/2) / zoom
@@ -115,6 +124,8 @@ export function loadSavedSettings(state, draw) {
     helpers.updateLightnessUI(lightnessInput, state);
     helpers.updateSmoothnessUI(smoothInput, state);
     helpers.updatePowerUI(powerInput, state);
+    helpers.updateHeightUI(document.getElementById("heightInput"), state);
+    helpers.updateView3DUI(state);
 
     if (state.bw) {
         bwButton.classList.add("toggled");

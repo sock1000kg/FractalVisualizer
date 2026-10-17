@@ -197,6 +197,29 @@ body {
     color: white;
 }
 
+/* the 3D button is disabled without WebGL (its tooltip says why) */
+#controls button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* short message at the bottom centre (e.g. when 3D fails to start) */
+#toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(23, 23, 27, 0.9);
+    color: #ffc857;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    max-width: min(460px, calc(100vw - 32px));
+    box-shadow: 0 0 10px #00000055;
+    pointer-events: none;
+}
+
 #controls button:focus-visible,
 #advanced button:focus-visible {
     outline: 2px solid #ffffff55;

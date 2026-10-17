@@ -58,6 +58,29 @@ export function updatePrecisionWarning(state, limit) {
     document.getElementById("precisionWarning").classList.toggle("hidden", magnification(state) <= (typeof limit === "function" ? limit(state) : limit));
 }
 
+//3D MODE UI: keeps the 3D button and the controls that only make sense in 3D (the Height
+//slider and Reset camera) in sync with state.view3d. Called when 3D is toggled, a preset is
+//loaded, or 3D had to be turned off.
+export function updateView3DUI(state) {
+    document.getElementById("view3dToggle").classList.toggle("toggled", state.view3d);
+    document.getElementById("heightLabel").classList.toggle("hidden", !state.view3d);
+    document.getElementById("resetCamToggle").classList.toggle("hidden", !state.view3d);
+}
+export function updateHeightUI (heightInput, state) {
+    heightInput.value = state.height3d;
+    document.getElementById("heightValue").textContent = state.height3d;
+}
+
+//A short message at the bottom of the screen that fades away by itself (used when 3D fails)
+let toastTimer = null;
+export function showToast(text) {
+    const toast = document.getElementById("toast");
+    toast.textContent = text;
+    toast.classList.remove("hidden");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.add("hidden"), 5000);
+}
+
 //the two helpers below set both the slider and its value label
 export function updateSmoothnessUI (smoothInput, state) {
     smoothInput.value = state.smoothness;
@@ -93,7 +116,8 @@ export function updatePreviewVisibility(state, checkbox) {
     const partner = FRACTALS[partnerKey];
     document.getElementById("previewToggleLabel").classList.toggle("hidden", !partner);
     if (partner) document.getElementById("previewToggleText").textContent = `${partner.name} preview`;
-    const visible = !!partner && checkbox.checked;
+    //the inset is hidden in 3D: a screen position is no longer one complex point there
+    const visible = !!partner && checkbox.checked && !state.view3d;
     document.getElementById("previewBox").classList.toggle("hidden", !visible);
     return visible;
 }
@@ -122,7 +146,7 @@ export function updateFormula(state) {
 //and zooming change where that point is on screen. Only shown on a Mandelbrot-kind type.
 export function updateMainMarker(state) {
     const marker = document.getElementById("cMarker");
-    const show = !!state.markerPoint && getFractal(state.fractal).kind === "mandelbrot";
+    const show = !!state.markerPoint && getFractal(state.fractal).kind === "mandelbrot" && !state.view3d;
     marker.classList.toggle("hidden", !show);
     if (!show) return;
     const pos = complexToScreen(state, document.getElementById("canvas"), state.markerPoint.re, state.markerPoint.im);
@@ -168,7 +192,7 @@ export function flashMainMarker(state) {
 //it is repositioned after every render to follow panning and zooming.
 export function updatePinMarker(state) {
     const marker = document.getElementById("pinMarker");
-    const show = !!state.pin && getFractal(state.fractal).kind === "mandelbrot";
+    const show = !!state.pin && getFractal(state.fractal).kind === "mandelbrot" && !state.view3d;
     marker.classList.toggle("hidden", !show);
     if (!show) return;
     const pos = complexToScreen(state, document.getElementById("canvas"), state.pin.re, state.pin.im);

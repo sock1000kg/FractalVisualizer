@@ -1,9 +1,11 @@
 import {draw} from './draw.js';
 import {getFractal, FRACTALS, formatComplex} from './fractals.js';
 import {complexToScreen} from './view.js';
-import {createGLRenderer} from './glRenderer.js';
+import {createGLRenderer, FLOAT_LIMIT} from './glRenderer.js';
+import {createTerrainRenderer} from './terrainRenderer.js';
+import {DEFAULT_CAM} from './mat4.js';
 import {setupInputs} from './inputs.js';
-import {setLines} from './helpers.js';
+import {setLines, updateView3DUI, showToast} from './helpers.js';
 
 let canvas = document.getElementById("canvas");
 canvas.width = window.innerWidth;
@@ -13,12 +15,14 @@ canvas.height = window.innerHeight;
 //(getContext("2d") returns null after "webgl" was taken, and vice versa),
 //so we cannot try WebGL later and fall back on the same canvas.
 //Use ?renderer=cpu in the URL to force the CPU renderer.
-//Returns {canvas, drawFrame, limitFor, renderer}: the canvas may be a fresh clone (see below),
-//so always use the returned one.
+//Returns {canvas, drawFrame, limitFor, drawTerrain, renderer}: the canvas may be a fresh clone
+//(see below), so always use the returned one. drawTerrain is the 3D renderer (only built when
+//withTerrain is set, i.e. for the main canvas; null on the CPU or if it cannot be set up).
 const forceCpu = new URLSearchParams(window.location.search).get("renderer") === "cpu";
-function makeRenderer(canvas, allowGL = true) {
+function makeRenderer(canvas, allowGL = true, withTerrain = false) {
   let drawFrame = null; //set when WebGL works
   let limitFor = null; //WebGL only: state -> magnification where the picture stops being accurate
+  let drawTerrain = null; //set when WebGL works and the 3D terrain renderer could be built
   let renderer = "cpu";
   if (allowGL && !forceCpu) {
     //preserveDrawingBuffer keeps the image after it is shown, which
@@ -30,6 +34,14 @@ function makeRenderer(canvas, allowGL = true) {
         drawFrame = gr.draw;
         limitFor = gr.limitFor;
         renderer = "webgl";
+        if (withTerrain) {
+          //a failure here only costs the 3D mode (its button stays disabled), never the 2D view
+          try {
+            drawTerrain = createTerrainRenderer(canvas, gl).draw;
+          } catch (e) {
+            console.error("3D terrain renderer unavailable:", e);
+          }
+        }
       } catch (e) {
         console.error("WebGL renderer failed, using CPU:", e);
         //this canvas is now locked to WebGL, so swap in a fresh clone
@@ -41,10 +53,10 @@ function makeRenderer(canvas, allowGL = true) {
       }
     }
   }
-  return { canvas, drawFrame, limitFor, renderer };
+  return { canvas, drawFrame, limitFor, drawTerrain, renderer };
 }
 
-const main = makeRenderer(canvas);
+const main = makeRenderer(canvas, true, true);
 canvas = main.canvas;
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -57,10 +69,25 @@ window.renderer = renderer; //for debugging in the console
 //WebGL asks its renderer: about 1e11x with the double-float shader (whole powers), 1e5x with
 //plain floats (fractional powers, or a GPU where double-float is not reliable). The CPU uses
 //doubles (~16 digits) and holds until about 1e13x.
-const precisionLimit = (s) => main.limitFor ? main.limitFor(s) : 1e13;
+//The 3D terrain always uses plain floats (no double-float in a vertex shader), so its limit is 1e5.
+const precisionLimit = (s) => s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
 
 //the single draw function the rest of the app calls
 function render() {
+  //3D: draw the terrain. If its shader fails (a driver that rejects it), turn 3D off for good
+  //and carry on with the normal 2D picture below.
+  if (state.view3d && main.drawTerrain) {
+    try {
+      main.drawTerrain(state);
+      return;
+    } catch (e) {
+      console.error("3D terrain failed, back to 2D:", e);
+      main.drawTerrain = null;
+      state.view3d = false;
+      updateView3DUI(state);
+      showToast("3D mode is not available on this GPU: " + e.message.split("\n")[0]);
+    }
+  }
   if (drawFrame) drawFrame(state);
   else draw(canvas, state);
 }
@@ -188,6 +215,11 @@ const state = {
   //change, a preset or a jump. Not saved in presets.
   pin: null,
 
+  //3D terrain mode (see terrainRenderer.js): the 2D fractal shown as a lit landscape
+  view3d: false,
+  height3d: 35, //Height slider 0..100 (how tall the terrain is)
+  cam3d: { ...DEFAULT_CAM }, //orbit camera: yaw, pitch (radians), dist (see mat4.js)
+
   //modes
   bw: false,
   simple: false,
@@ -195,7 +227,7 @@ const state = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
-  setupInputs(canvas, state, {render, renderPreview, precisionLimit});
+  setupInputs(canvas, state, {render, renderPreview, precisionLimit, has3D: !!main.drawTerrain});
   render();
 });
 console.log("Main script loaded");

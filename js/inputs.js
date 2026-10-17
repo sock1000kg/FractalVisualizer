@@ -3,6 +3,7 @@ import {FRACTALS} from './fractals.js';
 import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
         parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
+import {DEFAULT_CAM, clampCam} from './mat4.js';
 
 //api = {render, renderPreview, precisionLimit}: render() draws the main canvas, renderPreview(p)
 //draws the inset (the partner of the current type; p is the complex point under the cursor,
@@ -27,6 +28,7 @@ export function setupInputs(canvas, state, api){
     setupMouseTrack(canvas, state, draw, preview);
     setupTouch(canvas, state, draw, preview);
     setupVariablesInputs(canvas, state, draw);
+    setupView3D(state, draw, api.has3D);
     setupPreviewToggle(state, preview, canvas, draw);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
@@ -36,6 +38,49 @@ export function setupInputs(canvas, state, api){
     helpers.updateMaxIterUI(document.getElementById("iterInput"), state);
     helpers.updatePrecisionWarning(state, api.precisionLimit);
     preview.refresh();
+}
+
+//3D TERRAIN CONTROLS (the camera itself is driven by the mouse and touch handlers below)
+//  - the 3D button toggles state.view3d. It is disabled without WebGL (the CPU renderer cannot
+//    draw the terrain), with a tooltip saying why.
+//  - Height scales the terrain; Reset camera restores the default orbit angles and distance.
+//  - Both only show in 3D (helpers.updateView3DUI).
+function setupView3D(state, draw, has3D) {
+    const button = document.getElementById("view3dToggle");
+    if (!has3D) {
+        button.disabled = true;
+        button.title = "3D needs WebGL";
+    }
+    button.addEventListener("click", () => {
+        state.view3d = !state.view3d;
+        helpers.updateView3DUI(state);
+        draw(); //also hides / restores the inset and the markers
+    });
+
+    const heightInput = document.getElementById("heightInput");
+    heightInput.addEventListener("input", () => {
+        const value = parseFloat(heightInput.value);
+        if (!isNaN(value)) {
+            state.height3d = Math.max(0, Math.min(100, value));
+            helpers.updateHeightUI(heightInput, state);
+            draw();
+        }
+    });
+
+    document.getElementById("resetCamToggle").addEventListener("click", () => {
+        state.cam3d = { ...DEFAULT_CAM };
+        draw();
+    });
+    helpers.updateHeightUI(heightInput, state);
+    helpers.updateView3DUI(state);
+}
+
+//ORBIT: turn dragged pixels into camera angles (0.005 radians per pixel, about 0.3 degrees).
+//Dragging right turns the camera around the terrain, dragging down lifts it higher up.
+function orbitBy(state, dxPixels, dyPixels) {
+    state.cam3d.yaw += dxPixels * 0.005;
+    state.cam3d.pitch += dyPixels * 0.005;
+    clampCam(state.cam3d);
 }
 
 //PREVIEW CONTROLLER
@@ -395,8 +440,10 @@ function setupMouseTrack (canvas, state, draw, preview) {
     let lastY = 0;
     let downX = 0; //where the button went down, to tell a click from a drag
     let downY = 0;
+    let panDrag = true; //3D only: this drag pans the region (Shift or right button) instead of orbiting
     canvas.addEventListener("mousedown", (e) => {
         dragging = true;
+        panDrag = e.shiftKey || e.button === 2;
         lastX = e.clientX;
         lastY = e.clientY;
         downX = e.clientX;
@@ -408,6 +455,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
     //  - Mandelbrot kind: pin the inset at the clicked point p (a second click unpins)
     //  - Julia kind: toggle pause, which freezes c and so the inset's marker (same as the P key)
     canvas.addEventListener("click", (e) => {
+        if (state.view3d) return; //3D: a click does nothing (no pin, no pause)
         if (e.pointerType === "touch") return; //touch has no hover drift: the finger sets the point
         if (Math.hypot(e.clientX - downX, e.clientY - downY) >= TAP_MOVE) return;
         if (FRACTALS[state.fractal].kind === "julia") {
@@ -429,6 +477,10 @@ function setupMouseTrack (canvas, state, draw, preview) {
     window.addEventListener("mouseup", () => {
         dragging = false;
     });
+    //right-drag pans in 3D, so keep the browser's context menu away (2D keeps it)
+    canvas.addEventListener("contextmenu", (e) => {
+        if (state.view3d) e.preventDefault();
+    });
 
     //Scrolling zoom
     let scrolling = false;
@@ -438,11 +490,21 @@ function setupMouseTrack (canvas, state, draw, preview) {
         scrolling = true;
         e.preventDefault();
         const zoomAmount = 1.1;
-        //zoom toward the cursor: the point under it stays under it (zoomAt in view.js),
-        //within the allowed magnification range
         const factor = e.deltaY < 0 ? zoomAmount : 1 / zoomAmount; //scroll up = zoom in
-        zoomAt(canvas, state, e.clientX, e.clientY, clampZoom(state, state.zoom * factor));
-        helpers.updateZoomUI(zoomInput, state);
+        if (state.view3d && e.ctrlKey) {
+            //3D, Ctrl + wheel: move the CAMERA closer / farther (scroll up = closer)
+            state.cam3d.dist /= factor;
+            clampCam(state.cam3d);
+        } else {
+            //zoom toward the cursor: the point under it stays under it (zoomAt in view.js),
+            //within the allowed magnification range. In 3D a screen position is not one point
+            //of the plane, so the 3D wheel zooms the fractal region around the screen centre
+            //(like the zoom box); Auto iterations follows in draw().
+            const sx = state.view3d ? canvas.width / 2 : e.clientX;
+            const sy = state.view3d ? canvas.height / 2 : e.clientY;
+            zoomAt(canvas, state, sx, sy, clampZoom(state, state.zoom * factor));
+            helpers.updateZoomUI(zoomInput, state);
+        }
         draw();
 
         //Timer to count as "end of scroll"
@@ -488,7 +550,9 @@ function setupMouseTrack (canvas, state, draw, preview) {
                 const dx = e.clientX - lastX;
                 const dy = e.clientY - lastY;
     
-                panBy(state, dx, dy);
+                //3D: a plain drag orbits the camera; Shift / right drag pans the region like 2D
+                if (state.view3d && !panDrag) orbitBy(state, dx, dy);
+                else panBy(state, dx, dy);
     
                 lastX = e.clientX;
                 lastY = e.clientY;
@@ -540,7 +604,11 @@ function setupTouch (canvas, state, draw, preview) {
             return;
         }
 
-        if (g.n === 1) {
+        if (g.n === 1 && state.view3d) {
+            //3D: one finger orbits the camera. c does NOT follow the finger here (unlike 2D),
+            //because the finger is needed for orbiting.
+            orbitBy(state, g.x - prev.x, g.y - prev.y);
+        } else if (g.n === 1) {
             preview.setPoint(g.x, g.y); //the inset follows the finger (draw() below refreshes it)
             if (!state.pause) {
                 //same mapping as the mouse hover
