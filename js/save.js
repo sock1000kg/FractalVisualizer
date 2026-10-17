@@ -11,6 +11,9 @@ export function saveSettings(state) {
         c: { re: state.c.re, im: state.c.im },
         hueBase: state.hueBase,
         hueSpeed: state.hueSpeed,
+        maxIter: state.maxIter,
+        saturation: state.saturation,
+        lightness: state.lightness,
         bw: state.bw,
         simple: state.simple,
         offsetX: state.offsetX,
@@ -51,6 +54,11 @@ export function loadSavedSettings(state, draw) {
     state.c.im = chosen.c.im;
     state.hueBase = chosen.hueBase;
     state.hueSpeed = chosen.hueSpeed;
+    //presets saved before these fields existed fall back to defaults;
+    //?? (not ||) so a saved 0 for saturation/lightness stays valid
+    state.maxIter = chosen.maxIter ?? 60;
+    state.saturation = chosen.saturation ?? 70;
+    state.lightness = chosen.lightness ?? 50;
     state.bw = chosen.bw;
     state.offsetX = chosen.offsetX || -canvas.width / 2;
     state.offsetY = chosen.offsetY || -canvas.height / 2;
@@ -61,13 +69,19 @@ export function loadSavedSettings(state, draw) {
     const cImInput = document.getElementById("cImInput");
     const hueBaseInput = document.getElementById("hueBaseInput");
     const hueSpeedInput = document.getElementById("hueSpeedInput");
+    const iterInput = document.getElementById("iterInput");
+    const saturationInput = document.getElementById("saturationInput");
+    const lightnessInput = document.getElementById("lightnessInput");
     const bwButton = document.getElementById("bwToggle");
 
-    //Update UI
+    //Update UI (these helpers also refresh the value labels)
     helpers.updateZoomUI(zoomInput, state);
     helpers.updateCUI(cImInput, cReInput, state);
     helpers.updateHueBaseUI(hueBaseInput, state);
     helpers.updateHueSpeedUI(hueSpeedInput, state);
+    helpers.updateMaxIterUI(iterInput, state);
+    helpers.updateSaturationUI(saturationInput, state);
+    helpers.updateLightnessUI(lightnessInput, state);
 
     if (state.bw) {
         bwButton.classList.add("toggled");
