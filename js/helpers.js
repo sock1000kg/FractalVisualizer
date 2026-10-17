@@ -1,4 +1,6 @@
 //HELPER FUNCTIONS FOR UI AND INPUTS
+import {getFractal} from './fractals.js';
+
 export function pause(state) {
     state.pause = !state.pause;
 }
@@ -55,4 +57,12 @@ export function updatesimpleUI(simpleButton, state) {
 //keeps the type selector in sync with state.fractal (used after loading a preset)
 export function updateFractalUI(fractalSelect, state) {
     fractalSelect.value = state.fractal;
+}
+
+//Shows the Julia preview only when the current type has a Julia counterpart (juliaOf in
+//the registry) AND the "Julia preview" checkbox is on. Returns true when it is visible.
+export function updatePreviewVisibility(state, checkbox) {
+    const visible = !!getFractal(state.fractal).juliaOf && checkbox.checked;
+    document.getElementById("previewBox").classList.toggle("hidden", !visible);
+    return visible;
 }

@@ -1,15 +1,71 @@
 import * as helpers from './helpers.js';
 import {FRACTALS} from './fractals.js';
-import {getViewCenter, setViewCenter, applyFractalDefaults, zoomAt} from './view.js';
+import {getViewCenter, setViewCenter, applyFractalDefaults, zoomAt, screenToComplex} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
 
-export function setupInputs(canvas, state, draw){
+//api = {render, renderPreview}: render() draws the main canvas, renderPreview(p) draws the
+//Julia inset for the complex point p.
+export function setupInputs(canvas, state, api){
+    const preview = createPreview(canvas, state, api.renderPreview);
+    //Every redraw of the main canvas also refreshes the inset, so a slider, mode, preset
+    //or type change is picked up by the preview without touching each handler.
+    const draw = () => {
+        api.render();
+        preview.refresh();
+    };
     setupButtons(canvas, state, draw);
-    setupMouseTrack(canvas, state, draw);
-    setupTouch(canvas, state, draw);
+    setupMouseTrack(canvas, state, draw, preview);
+    setupTouch(canvas, state, draw, preview);
     setupVariablesInputs(canvas, state, draw);
+    setupPreviewToggle(state, preview);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
+}
+
+//JULIA PREVIEW CONTROLLER
+//Remembers the last cursor / finger position (screen pixels) and redraws the inset for the
+//complex point under it. The position is kept in pixels, not as a complex number, so the
+//inset keeps following the same spot of the screen when the view pans or zooms.
+//Before the first move it uses the middle of the canvas.
+function createPreview(canvas, state, renderPreview) {
+    const checkbox = document.getElementById("previewToggle");
+    let x = null, y = null;
+    return {
+        setPoint(sx, sy) {
+            x = sx;
+            y = sy;
+        },
+        //the complex point under the remembered position
+        point() {
+            return screenToComplex(state, x ?? canvas.width / 2, y ?? canvas.height / 2);
+        },
+        //updates visibility, and redraws the inset when it is shown
+        //(it runs even when the main image is paused)
+        refresh() {
+            if (helpers.updatePreviewVisibility(state, checkbox)) renderPreview(this.point());
+        },
+    };
+}
+
+function setupPreviewToggle(state, preview) {
+    document.getElementById("previewToggle").addEventListener("change", () => preview.refresh());
+}
+
+//CLICK / TAP TO JUMP
+//Leaves the current Mandelbrot-style type for its Julia counterpart (juliaOf) and uses the
+//clicked point p as the Julia constant c: that is exactly the set shown in the inset.
+//Colours, power and the other settings are kept.
+const TAP_MOVE = 5; //px: moving less than this between down and up still counts as a click
+function jumpToJulia(canvas, state, p, draw) {
+    const target = FRACTALS[state.fractal].juliaOf;
+    if (!target) return;
+    state.fractal = target;
+    applyFractalDefaults(canvas, state); //the Julia type's default view (centre 0, 0 and its zoom)
+    state.c = {re: p.re, im: p.im};      //then the clicked point (overrides the default c)
+    helpers.updateFractalUI(document.getElementById("fractalSelect"), state);
+    helpers.updateZoomUI(document.getElementById("zoomInput"), state);
+    helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
+    draw();
 }
 
 function setupButtons(canvas, state, draw) {
@@ -281,15 +337,25 @@ function setupVariablesInputs (canvas, state, draw) {
     });
 }
 
-function setupMouseTrack (canvas, state, draw) {
+function setupMouseTrack (canvas, state, draw, preview) {
     //Dragging
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
+    let downX = 0; //where the button went down, to tell a click from a drag
+    let downY = 0;
     canvas.addEventListener("mousedown", (e) => {
         dragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
+        downX = e.clientX;
+        downY = e.clientY;
+    });
+    //click to jump into the Julia set under the cursor; a drag (pan) must not jump
+    canvas.addEventListener("click", (e) => {
+        if (e.pointerType === "touch") return; //touch taps are handled in setupTouch
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) >= TAP_MOVE) return;
+        jumpToJulia(canvas, state, screenToComplex(state, e.clientX, e.clientY), draw);
     });
     window.addEventListener("mouseup", () => {
         dragging = false;
@@ -331,7 +397,19 @@ function setupMouseTrack (canvas, state, draw) {
     let cReInput = document.getElementById("cReInput"); //for updating the variable UI
     let cImInput = document.getElementById("cImInput");
     let drawScheduled = false;
+    let previewScheduled = false;
     canvas.addEventListener("mousemove", (e) => {
+        //the inset follows the cursor. Unpaused, the redraw below refreshes it; paused there is
+        //no main redraw, so refresh the inset alone (batched per frame like the rest)
+        preview.setPoint(e.clientX, e.clientY);
+        if(state.pause && !dragging && !previewScheduled) {
+            previewScheduled = true;
+            requestAnimationFrame(() => {
+                previewScheduled = false;
+                preview.refresh();
+            });
+        }
+
         if(!state.pause && !drawScheduled && !dragging && !scrolling) {
             drawScheduled = true;
             requestAnimationFrame(() => { // only update every screen refresh rate
@@ -368,7 +446,11 @@ function setupMouseTrack (canvas, state, draw) {
 //follow several fingers at once. We only handle pointerType "touch"; the mouse keeps using
 //the mouse handlers above, so desktop behaviour is unchanged.
 //One finger: moves c (or pans when paused). Two fingers: pinch zoom + pan together.
-function setupTouch (canvas, state, draw) {
+function setupTouch (canvas, state, draw, preview) {
+    //TAP detection: a tap is one finger, moved < TAP_MOVE px, lifted within TAP_TIME ms, with
+    //no second finger at any point. tapOk goes false as soon as one of those is broken.
+    const TAP_TIME = 300;
+    let tap = null; //{x, y, t, ok} for the current touch sequence
     const touches = new Map(); //pointerId -> {x, y}: the fingers currently down (Map keeps insertion order)
     let prev = null; //reference from the previous frame: {x, y} for 1 finger, {x, y, dist} for 2 fingers
     let drawScheduled = false;
@@ -402,6 +484,7 @@ function setupTouch (canvas, state, draw) {
         }
 
         if (g.n === 1) {
+            preview.setPoint(g.x, g.y); //the inset follows the finger (draw() below refreshes it)
             if (!state.pause) {
                 //same mapping as the mouse hover
                 state.c.re = (g.x - canvas.width / 2) / state.baseZoom;
@@ -432,12 +515,15 @@ function setupTouch (canvas, state, draw) {
         e.preventDefault(); //stops the browser sending fake mouse events after the touch
         canvas.setPointerCapture(e.pointerId); //keep receiving this finger's events even if it leaves the canvas
         touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+        if (touches.size === 1) tap = {x: e.clientX, y: e.clientY, t: performance.now(), ok: true};
+        else if (tap) tap.ok = false; //a second finger: this is a pinch, never a tap
         resetReference(); //finger count changed -> new reference
     });
 
     canvas.addEventListener("pointermove", (e) => {
         if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
         touches.set(e.pointerId, {x: e.clientX, y: e.clientY}); //always store the latest position
+        if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) >= TAP_MOVE) tap.ok = false;
         if (!drawScheduled) {
             drawScheduled = true;
             requestAnimationFrame(() => { //at most one update per screen refresh; uses the latest positions
@@ -452,6 +538,13 @@ function setupTouch (canvas, state, draw) {
         touches.delete(e.pointerId);
         if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
         resetReference(); //e.g. 2 fingers -> 1: the remaining finger becomes the new start point
+        //last finger lifted: was it a quick, still, single-finger tap? then jump (pointercancel never taps)
+        if (touches.size === 0 && tap) {
+            const isTap = tap.ok && e.type === "pointerup" && performance.now() - tap.t < TAP_TIME;
+            const {x, y} = tap;
+            tap = null;
+            if (isTap) jumpToJulia(canvas, state, screenToComplex(state, x, y), draw);
+        }
     }
     canvas.addEventListener("pointerup", endTouch);
     canvas.addEventListener("pointercancel", endTouch);
