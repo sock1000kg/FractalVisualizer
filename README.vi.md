@@ -14,9 +14,7 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 - Mode "Simple" cho các máy yếu hơn
 - Cho phép người dùng thay đổi độ sâu, độ đậm, độ sáng của fractal
 - Nhiều loại fractal: Julia, Mandelbrot và Burning Ship (với Mandelbrot và Burning Ship, chuột quyết định điểm xuất phát)
-
-## Tính năng trong tương lai
-- Vẽ fractal bằng WebGl (giảm lag)
+- Vẽ fractal bằng WebGL (giảm lag). Tự động chuyển sang vẽ bằng CPU nếu không hỗ trợ WebGL; thêm `?renderer=cpu` vào URL để buộc dùng CPU
 
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
