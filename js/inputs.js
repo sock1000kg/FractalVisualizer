@@ -6,6 +6,7 @@ import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js'
 import {DEFAULT_CAM, clampCam, moveTarget, TERRAIN_LIMITS, BULB_LIMITS, flyBasis, FLY_PITCH_MAX} from './mat4.js';
 import {FOV_Y as TERRAIN_FOV_Y} from './terrainRenderer.js';
 import {FOV_Y as BULB_FOV_Y} from './bulbRenderer.js';
+import {bulbZoomIn, bulbZoomOut, bulbSetDist} from './pick.js';
 
 //api = {render, renderPreview, precisionLimit, has3D, hasBulb}: render() draws the main canvas, renderPreview(p)
 //draws the inset (the partner of the current type; p is the complex point under the cursor,
@@ -452,9 +453,9 @@ function setupVariablesInputs (canvas, state, draw, hasBulb) {
             }
             if (isFly(state.fractal)) return; //no zoom on a fly type (the field is hidden)
             if (isRaymarch(state.fractal)) {
-                //a bulb's "zoom" is the camera distance: magnification = default distance / distance
-                state.camBulb.dist = getFractal(state.fractal).defaults.cam.dist / mag;
-                clampCam(state.camBulb, BULB_LIMITS);
+                //a bulb's "zoom" is the camera distance: magnification = default distance / distance,
+                //set around the current target (refused if the eye would end up in the surface)
+                bulbSetDist(state, getFractal(state.fractal).defaults.cam.dist / mag);
                 helpers.updateZoomUI(zoomInput, state);
                 draw();
                 return;
@@ -716,10 +717,10 @@ function setupMouseTrack (canvas, state, draw, preview) {
             flyWheelSpeed(state, e.deltaY);
             helpers.showToast(`Fly speed ×${+state.camFly.speed.toFixed(2)}`);
         } else if (isRaymarch(state.fractal)) {
-            //a bulb: the wheel changes the camera DISTANCE (x1.1 per notch, scroll up = closer),
-            //within the limits; that is the bulb's zoom
-            state.camBulb.dist /= factor;
-            clampCam(state.camBulb, BULB_LIMITS);
+            //a bulb: scroll up zooms toward the surface point under the cursor (20% of the way per
+            //notch, see pick.js), scroll down backs away from the current target
+            if (e.deltaY < 0) bulbZoomIn(state, canvas, e.clientX, e.clientY);
+            else bulbZoomOut(state);
             helpers.updateZoomUI(zoomInput, state);
         } else if (state.view3d && e.ctrlKey) {
             //3D, Ctrl + wheel: move the CAMERA closer / farther (scroll up = closer)
@@ -868,10 +869,14 @@ function setupTouch (canvas, state, draw, preview) {
                 panBy(state, g.x - prev.x, g.y - prev.y);
             }
         } else if (isRaymarch(state.fractal)) {
-            //a bulb: pinching changes the camera distance (spreading the fingers = closer)
+            //a bulb: pinching zooms like the wheel, at the midpoint between the fingers. It is continuous
+            //(the simplest): the finger spread ratio r = dist / prevDist sets the step. Spreading (r > 1)
+            //moves the camera the fraction 1 - 1 / r toward the surface (r = 1.25 is the wheel's 20%);
+            //pinching in (r < 1) backs away by dividing the distance by r.
             if (prev.dist > 0) {
-                state.camBulb.dist /= g.dist / prev.dist;
-                clampCam(state.camBulb, BULB_LIMITS);
+                const r = g.dist / prev.dist;
+                if (r > 1) bulbZoomIn(state, canvas, g.x, g.y, 1 - 1 / r);
+                else bulbZoomOut(state, r);
                 helpers.updateZoomUI(zoomInput, state);
             }
         } else {

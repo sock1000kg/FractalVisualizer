@@ -96,9 +96,12 @@ window.renderer = renderer; //for debugging in the console
 //plain floats (fractional powers, or a GPU where double-float is not reliable). The CPU uses
 //doubles (~16 digits) and holds until about 1e13x.
 //The 3D terrain always uses plain floats (no double-float in a vertex shader), so its limit is 1e5.
-//The bulbs have no limit (their zoom is the camera distance, which is clamped), so no warning.
+//The bulbs (zoom to the cursor, no fixed limit) are limited by the GPU's 32-bit floats: with positions
+//around 1 a float resolves about 6e-8, and a pixel's footprint dist * pixelAngle must stay well above that,
+//which gives dist of about 1e-3, i.e. 3e3x (3.0 / 1e-3). Past it the surface turns to noise.
 //A fly type's warning depends on how close the fly camera is to a surface (helpers.js), not on a zoom.
-const precisionLimit = (s) => isRaymarch(s.fractal) ? Infinity : s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
+const BULB_PRECISION_LIMIT = 3e3;
+const precisionLimit = (s) => isRaymarch(s.fractal) ? BULB_PRECISION_LIMIT : s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
 
 //the single draw function the rest of the app calls
 function render() {

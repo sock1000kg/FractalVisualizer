@@ -63,11 +63,16 @@ export const FOV_Y = 0.8;
 //             far away. It makes far walls fade out, which is what gives a big space its depth.
 //  trapScale  the orbit trap is multiplied by this to become the "t" of colorFromT (hue = t * hue speed)
 //  iterCap    the most iterations of the distance estimator (the bulbs: 64, see de() below)
+//  normalFloor  the smallest sample distance of the surface normal (see calcNormal below). 1e-5 for the
+//             fly types; the bulbs, which can be zoomed in far, lower it to 2e-7 (fractals.js). Why: the
+//             floor only protects against float rounding of p (about 1e-7), and 1e-5 is far coarser than a
+//             pixel on a zoomed-in bulb: the samples would average over many pixels and the lighting turns
+//             blotchy. It is written into the shader as a literal (toExponential(1) gives "1.0e-5").
 //  headlight  0..1: how much the light is moved from its fixed direction to the camera. 0 (the
 //             bulbs, the Mandelbox) = the fixed key light. 1 = a lamp on the camera: the walls you
 //             look at are lit, which a cave needs. The light direction becomes
 //             normalize(mix(L_fixed, -rd, headlight)), with rd the direction the pixel's ray looks in.
-export const MARCH_DEFAULTS = { steps: 128, bound: 1.5, far: 10.0, fog: 0.0, trapScale: 10.0, iterCap: 64, headlight: 0.0 };
+export const MARCH_DEFAULTS = { steps: 128, bound: 1.5, far: 10.0, fog: 0.0, trapScale: 10.0, iterCap: 64, headlight: 0.0, normalFloor: 1.0e-5 };
 
 //a number as a GLSL float literal ("10" would be an int there, and GLSL ES 1.00 never converts)
 const glslFloat = (n) => Number.isInteger(n) ? n.toFixed(1) : String(n);
@@ -239,7 +244,7 @@ void main() {
     vec3 p = ro + rd * t;
     // the normal's sample distance: about a pixel's footprint, but never so small that float
     // rounding of p (about 1e-7) swamps the differences
-    vec3 n = calcNormal(p, max(eps * t, 1.0e-5));
+    vec3 n = calcNormal(p, max(eps * t, ${m.normalFloor.toExponential(1)}));
 
     // LIGHTING. A fixed key light (a direction pointing TOWARDS the light), Lambert's rule
     // (a surface is brighter the more it faces the light: dot(n, L)) and 0.25 ambient so the
