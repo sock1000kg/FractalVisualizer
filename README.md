@@ -17,6 +17,7 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 - WebGL based rendering (reduces lag). Falls back to the CPU renderer if WebGL is unavailable; add `?renderer=cpu` to the URL to force the CPU renderer
 - Touch support for phones and tablets: one finger moves the constant c (or pans while paused), two fingers pinch-zoom and pan at the same time
 - Smooth colouring: a Smoothness slider removes the colour bands (100 = fully smooth, 0 = the classic banded look)
+- Power: a Power slider (2 to 8) changes the formula from z² to zⁿ for every fractal type, e.g. Julia gets n-fold symmetry and Mandelbrot gets n−1 lobes. Fractional powers show a straight seam, that's expected
 
 ## Screenshots
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />

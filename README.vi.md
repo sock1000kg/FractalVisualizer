@@ -17,6 +17,7 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 - Vẽ fractal bằng WebGL (giảm lag). Tự động chuyển sang vẽ bằng CPU nếu không hỗ trợ WebGL; thêm `?renderer=cpu` vào URL để buộc dùng CPU
 - Hỗ trợ cảm ứng trên điện thoại và máy tính bảng: một ngón tay để đổi hằng số c (hoặc kéo di chuyển khi đang tạm dừng), hai ngón tay để phóng to/thu nhỏ và di chuyển cùng lúc
 - Tô màu mượt: thanh trượt Smoothness giúp xoá các dải màu (100 = hoàn toàn mượt, 0 = kiểu dải màu cổ điển)
+- Luỹ thừa: thanh trượt Power (từ 2 đến 8) đổi công thức từ z² thành zⁿ cho mọi loại fractal, ví dụ Julia có đối xứng n lần và Mandelbrot có n−1 thùy. Luỹ thừa không nguyên sẽ hiện một đường nối thẳng, đó là bình thường
 
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
