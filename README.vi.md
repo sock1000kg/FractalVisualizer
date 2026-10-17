@@ -1,7 +1,7 @@
 # Trình tạo ảnh Fractal
 *(Tiếng Việt | [English](./README.md))*
 
-[Demo](https://sock1000kg.github.io/FractalVisualizer/) (hiện tại chỉ hoạt động trên máy tính)
+[Demo](https://sock1000kg.github.io/FractalVisualizer/)
 
 Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, được xây dựng bằng HTML5 và JavaScript dựa trên logic của tập Julia. Bạn có thể khám phá vô số hoa văn đầy mê hoặc, phóng to để thấy các chi tiết tinh xảo, và lưu lại những fractal yêu thích. Ngoài ra, bạn cũng có thể tuỳ chình màu sắc trong phần "Cài đặt nâng cao" để thoả mãn trí tưởng tượng của mình. Chúc bạn vui vẻ :)
 
@@ -15,6 +15,7 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 - Cho phép người dùng thay đổi độ sâu, độ đậm, độ sáng của fractal
 - Nhiều loại fractal: Julia, Mandelbrot và Burning Ship (với Mandelbrot và Burning Ship, chuột quyết định điểm xuất phát)
 - Vẽ fractal bằng WebGL (giảm lag). Tự động chuyển sang vẽ bằng CPU nếu không hỗ trợ WebGL; thêm `?renderer=cpu` vào URL để buộc dùng CPU
+- Hỗ trợ cảm ứng trên điện thoại và máy tính bảng: một ngón tay để đổi hằng số c (hoặc kéo di chuyển khi đang tạm dừng), hai ngón tay để phóng to/thu nhỏ và di chuyển cùng lúc
 
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />

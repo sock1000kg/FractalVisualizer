@@ -1,7 +1,7 @@
 # Fractal Visualizer
 *(English | [Tiếng Việt](./README.vi.md))*
 
-[Live Demo](https://sock1000kg.github.io/FractalVisualizer/) (currently only works on PC)
+[Live Demo](https://sock1000kg.github.io/FractalVisualizer/)
 
 Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaScript using the Julia set. Explore a wide variety of mesmerizing patterns, zoom in to discover intricate details, and save your favorite fractals. Customize colors, coordinates, and more in the advanced settings to unleash your creativity. Have fun :)
 
@@ -15,6 +15,7 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 - Control the fractal's depth (the number of iterations), Saturation, Lightness
 - Different types of fractals: Julia, Mandelbrot and Burning Ship (for Mandelbrot and Burning Ship the mouse sets the starting point)
 - WebGL based rendering (reduces lag). Falls back to the CPU renderer if WebGL is unavailable; add `?renderer=cpu` to the URL to force the CPU renderer
+- Touch support for phones and tablets: one finger moves the constant c (or pans while paused), two fingers pinch-zoom and pan at the same time
 
 ## Screenshots
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
