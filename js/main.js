@@ -31,8 +31,12 @@ function makeRenderer(canvas, allowGL = true, withTerrain = false) {
   if (allowGL && !forceCpu) {
     //preserveDrawingBuffer keeps the image after it is shown, which
     //canvas.toDataURL (the Download button) needs to capture it
-    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
+    //powerPreference "high-performance" asks for the stronger GPU on a laptop with two. It is
+    //only a HINT: the browser or OS may ignore it. On Windows the reliable fix is
+    //Settings > Display > Graphics > Browser > High performance.
+    const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, powerPreference: "high-performance" });
     if (gl) {
+      logGPU(gl);
       try {
         const gr = createGLRenderer(canvas, gl);
         drawFrame = gr.draw;
@@ -64,6 +68,18 @@ function makeRenderer(canvas, allowGL = true, withTerrain = false) {
     }
   }
   return { canvas, drawFrame, limitFor, drawTerrain, drawBulb, renderer };
+}
+
+//Print which GPU the page got (once per context, so the preview's too). The renderer name is only
+//available through the WEBGL_debug_renderer_info extension, which some browsers hide, so every
+//step is guarded and a failure is silent.
+function logGPU(gl) {
+  try {
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    if (ext) console.log("GPU:", gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+  } catch (e) {
+    //hidden by the browser: nothing to report
+  }
 }
 
 const main = makeRenderer(canvas, true, true);
