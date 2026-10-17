@@ -44,15 +44,33 @@ uniform float uSat;       // 0..100
 uniform float uLight;     // 0..100
 uniform int uMode;        // 0 = colour, 1 = black and white, 2 = simple
 uniform float uSmooth;    // state.smoothness / 100: 0 = banded, 1 = fully smooth
+uniform float uPower;     // state.power: the n in z -> z^n + k
 
 // Extra steps run after a point escapes (see smoothValue in fractals.js).
-// highp has the range for 3. mediump floats overflow past about 65000, and each
-// step roughly squares |z|, so 3 steps could overflow to infinity/NaN: use 1 there.
-#ifdef GL_FRAGMENT_PRECISION_HIGH
+// At most 3 are run; they also stop early when |z| gets too big (see SAFE_LOG2).
 #define SMOOTH_EXTRA 3
+// A step must not make |z|^2 overflow, so we stop when log2|z| * n > SAFE_LOG2
+// (log2 of the |z| the next step would give). highp floats reach about 1e38 = 2^126, so
+// |z|^2 < 2^120 is safe with 60. mediump overflows past about 65000 = 2^16, so
+// |z|^2 < 2^14 needs 7.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+#define SAFE_LOG2 60.0
 #else
-#define SMOOTH_EXTRA 1
+#define SAFE_LOG2 7.0
 #endif
+
+// z^n for a real n (same as power() in fractals.js; read the polar-form and seam
+// explanation there). z = r*(cos t + i*sin t) gives z^n = r^n*(cos nt + i*sin nt),
+// with r^n = (r^2)^(n/2). Fractional n shows a straight seam on the negative real axis.
+vec2 cpow(vec2 z, float n) {
+    if (n == 2.0) return vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y); // fast path, as before
+    float r2 = dot(z, z);
+    // atan(0.0, 0.0) is undefined in GLSL, and Mandelbrot starts at z = 0
+    if (r2 == 0.0) return vec2(0.0);
+    float rn = pow(r2, 0.5 * n);
+    float nt = n * atan(z.y, z.x); // atan(y, x) is the two-argument atan2
+    return rn * vec2(cos(nt), sin(nt));
+}
 
 // Keep in sync with hslToRgb in utilities.js. Returns 0..255 values.
 // (Same 6 hue branches; a hue outside 0..360 matches none, so r = g = b = 0,
@@ -103,20 +121,26 @@ void main() {
 
     // SMOOTH COLOURING (full explanation at smoothValue in fractals.js).
     // The integer iter makes colour bands. For escaped points we run a few more
-    // steps so |z| is large, then nu = iter + extra - log2(ln|z| / ln 2) is a
-    // fractional iteration count. uSmooth blends: t = iter (bands) .. nu (smooth).
-    // Milestone 7: the 2 in log2 and ln 2 will become the power n.
+    // steps so |z| is large, then nu = iter + extraDone - ln(log2|z|) / ln n is a
+    // fractional iteration count (the inner ln 2 comes from the bailout radius 2, the
+    // outer log is base n because each step multiplies ln|z| by n).
+    // uSmooth blends: t = iter (bands) .. nu (smooth).
     float fi = float(iter);
     float t = fi;
     bool inside = (iter == uMaxIter);
     if (!inside) {
+        int extraDone = 0;
         // constant loop bound, as GLSL ES 1.00 requires
         for (int e = 0; e < SMOOTH_EXTRA; e++) {
+            // stop before |z| overflows the float range
+            float lz = 0.5 * log(dot(z, z)) / 0.6931471805599453;
+            if (lz * uPower > SAFE_LOG2) break;
             ${glsl.step}
+            extraDone++;
         }
-        // ln|z| / ln 2 = log2|z|; max(.., 1.0) keeps log2 away from values <= 0 (NaN)
+        // ln|z| / ln 2 = log2|z|; max(.., 1.0) keeps log away from values <= 0 (NaN)
         float log2z = max(0.5 * log(dot(z, z)) / 0.6931471805599453, 1.0);
-        float nu = max(fi + float(SMOOTH_EXTRA) - log2(log2z), 0.0);
+        float nu = max(fi + float(extraDone) - log(log2z) / log(uPower), 0.0);
         t = fi + uSmooth * (nu - fi);
     }
 
@@ -204,7 +228,7 @@ export function createGLRenderer(canvas, gl) {
         //look up where each uniform lives once, not on every draw
         const uniforms = {};
         for (const name of ["uResolution", "uOffset", "uZoom", "uC", "uMaxIter",
-                            "uHueBase", "uHueSpeed", "uSat", "uLight", "uMode", "uSmooth"]) {
+                            "uHueBase", "uHueSpeed", "uSat", "uLight", "uMode", "uSmooth", "uPower"]) {
             uniforms[name] = gl.getUniformLocation(program, name);
         }
         cache[key] = { program, uniforms, aPos: gl.getAttribLocation(program, "aPos") };
@@ -242,6 +266,7 @@ export function createGLRenderer(canvas, gl) {
         gl.uniform1f(u.uLight, state.lightness);
         gl.uniform1i(u.uMode, mode);
         gl.uniform1f(u.uSmooth, state.smoothness / 100);
+        gl.uniform1f(u.uPower, state.power);
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
