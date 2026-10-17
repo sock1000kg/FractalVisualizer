@@ -1,5 +1,5 @@
 //HELPER FUNCTIONS FOR UI AND INPUTS
-import {getFractal, FRACTALS, isRaymarch, isFly, mandelboxDE} from './fractals.js';
+import {getFractal, FRACTALS, isRaymarch, isFly} from './fractals.js';
 import {complexToScreen, magnification, formatMagnification, iterToSlider, autoIterations} from './view.js';
 
 export function pause(state) {
@@ -54,14 +54,14 @@ export function updateMaxIterUI (iterInput, state) {
 //Shows the warning line under the formula when the magnification passes the limit of the
 //current renderer. `limit` is a number, or a function state => number (WebGL: about 1e11 or
 //1e5 depending on the state; the CPU's doubles: 1e13).
-//The fly camera (Mandelbox) has no zoom; what breaks there is the GPU's 32-bit float: close to a
+//The fly camera (Mandelbox, Kleinian) has no zoom; what breaks there is the GPU's 32-bit float: close to a
 //surface the distance to it (below about 1e-4) is smaller than a float can resolve around the
 //camera's coordinates, and the image breaks up. So the warning follows the distance to the surface.
 export function updatePrecisionWarning(state, limit) {
     const warning = document.getElementById("precisionWarning");
     if (isFly(state.fractal)) {
         const [x, y, z] = state.camFly.pos;
-        warning.classList.toggle("hidden", mandelboxDE(x, y, z, state) >= FLY_PRECISION_DE);
+        warning.classList.toggle("hidden", getFractal(state.fractal).deJS(x, y, z, state) >= FLY_PRECISION_DE);
         return;
     }
     warning.classList.toggle("hidden", magnification(state) <= (typeof limit === "function" ? limit(state) : limit));
@@ -74,7 +74,7 @@ export const FLY_PRECISION_DE = 1e-4;
 //A bulb type (Mandelbulb / Juliabulb) is 3D by itself: the terrain button and the Height slider
 //make no sense there and are hidden, Reset camera stays (it resets the bulb's camera), and the
 //"c z" slider (the third component of c) shows up.
-//The Mandelbox (a fly type) is raymarched too, so it hides the same terrain controls, but its camera
+//The Mandelbox and the Kleinian (the fly types) are raymarched too, so it hides the same terrain controls, but its camera
 //is the fly camera: no zoom field (you fly instead), no Ctrl + middle-drag hint (a controls hint
 //instead), no Power slider (it has none), and the Scale slider shows up.
 export function updateView3DUI(state) {
@@ -88,7 +88,9 @@ export function updateView3DUI(state) {
     document.getElementById("camMoveHint").classList.toggle("hidden", (!state.view3d && !bulb) || fly);
     document.getElementById("flyHint").classList.toggle("hidden", !fly);
     document.getElementById("czLabel").classList.toggle("hidden", !bulb);
-    document.getElementById("scaleLabel").classList.toggle("hidden", !fly);
+    //each fly type has its own shape slider: Scale for the Mandelbox, Box size for the Kleinian
+    document.getElementById("scaleLabel").classList.toggle("hidden", state.fractal !== "mandelbox");
+    document.getElementById("kleinSizeLabel").classList.toggle("hidden", state.fractal !== "kleinian");
     document.getElementById("zoomBox").classList.toggle("hidden", fly);
     document.getElementById("powerLabel").classList.toggle("hidden", fly);
 }
@@ -97,12 +99,17 @@ export function updateScaleUI (scaleInput, state) {
     scaleInput.value = state.scale;
     document.getElementById("scaleValue").textContent = state.scale.toFixed(2).replace("-", "−");
 }
+//the Kleinian Box size slider and its value label
+export function updateKleinSizeUI (kleinSizeInput, state) {
+    kleinSizeInput.value = state.kleinSize;
+    document.getElementById("kleinSizeValue").textContent = state.kleinSize.toFixed(3);
+}
 export function updateCzUI (czInput, state) {
     czInput.value = state.cz;
     document.getElementById("czValue").textContent = state.cz.toFixed(2);
 }
 
-//Enables / disables the 3D options of the type selector (bulbs and Mandelbox). The CPU renderer cannot draw them,
+//Enables / disables the 3D options of the type selector (the 3D types: bulbs, Mandelbox, Kleinian). The CPU renderer cannot draw them,
 //so without the bulb renderer they are greyed out and say why.
 export function setBulbOptionsEnabled(enabled) {
     for (const option of document.getElementById("fractalSelect").options) {
@@ -128,6 +135,7 @@ export function syncTypeUI(state) {
     updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
     updateCzUI(document.getElementById("czInput"), state);
     updateScaleUI(document.getElementById("scaleInput"), state);
+    updateKleinSizeUI(document.getElementById("kleinSizeInput"), state);
     updatePowerUI(document.getElementById("powerInput"), state);
     updateView3DUI(state);
 }

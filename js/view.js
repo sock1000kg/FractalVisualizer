@@ -56,7 +56,7 @@ export function setViewCenter(state, re, im) {
 //puts the power back to 2: the bulbs' power 8 would make a 2D picture look odd, and the user
 //did not choose it for 2D. This is done ONLY when the previous type was a raymarched one
 //(bulb or Mandelbox), so switching between two 2D types keeps whatever power the user set.
-//The Mandelbox has no power; it sets its scale and its fly camera (a copy of the default, the
+//The fly types (Mandelbox, Kleinian) have no power; each sets its shape parameter and its fly camera (a copy of the default, the
 //position array included, so flying never changes the registry).
 export function applyFractalDefaults(state, prevKey = state.fractal) {
     const d = getFractal(state.fractal).defaults;
@@ -65,7 +65,9 @@ export function applyFractalDefaults(state, prevKey = state.fractal) {
         state.cz = d.cz;
         state.power = d.power ?? 2;
         if (isFly(state.fractal)) {
-            state.scale = d.scale;
+            //each fly type brings only its own shape parameter (scale / kleinSize); the other keeps its value
+            state.scale = d.scale ?? state.scale;
+            state.kleinSize = d.kleinSize ?? state.kleinSize;
             state.camFly = { ...d.camFly, pos: [...d.camFly.pos] };
         } else {
             state.camBulb = { ...d.cam };

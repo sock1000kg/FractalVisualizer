@@ -1,5 +1,5 @@
 import * as helpers from './helpers.js';
-import {FRACTALS, getFractal, isRaymarch, isFly, mandelboxDE} from './fractals.js';
+import {FRACTALS, getFractal, isRaymarch, isFly} from './fractals.js';
 import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
         parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
@@ -72,7 +72,7 @@ function setupView3D(state, draw, has3D) {
     });
 
     //Reset camera: the terrain's camera, the bulb's own (back to that bulb's default framing) or the
-    //Mandelbox's fly camera (back to its start position)
+    //fly type's camera (back to its start position)
     document.getElementById("resetCamToggle").addEventListener("click", () => {
         if (isFly(state.fractal)) {
             const d = getFractal(state.fractal).defaults.camFly;
@@ -122,7 +122,7 @@ function moveCameraBy(state, canvas, dxPixels, dyPixels) {
 //DISTANCE-ADAPTIVE SPEED. A fixed speed is wrong in a fractal: fast enough to cross the whole
 //structure is far too fast to look at a detail the size of a pixel, and slow enough for that
 //detail takes forever in open space. The distance estimator knows how far the nearest surface is
-//(mandelboxDE in fractals.js, the same maths as the shader), so the speed is made PROPORTIONAL to
+//(the fractal's deJS in fractals.js, the same maths as the shader), so the speed is made PROPORTIONAL to
 //it:   speedNow = speed * clamp(DE, 1e-5, 5)   units per second.
 //Near a wall the camera slows down by itself (each step covers a fraction of the remaining
 //distance, so you can glide towards a surface forever and never reach it), and in open space it
@@ -147,7 +147,7 @@ const FLY_KEYS = { //key code -> [forward, right, up] weights
 //the speed in units per second right now (see above)
 export function flySpeedNow(state, boost = false) {
     const [x, y, z] = state.camFly.pos;
-    const de = Math.max(FLY_DE_MIN, Math.min(FLY_DE_MAX, mandelboxDE(x, y, z, state)));
+    const de = Math.max(FLY_DE_MIN, Math.min(FLY_DE_MAX, getFractal(state.fractal).deJS(x, y, z, state)));
     return state.camFly.speed * de * (boost ? FLY_BOOST : 1);
 }
 
@@ -165,10 +165,11 @@ export function flyMove(state, f, r, u, amount) {
     const dir = [0, 1, 2].map((i) => forward[i] * f + right[i] * r + (i === 1 ? u : 0)); //up is the world y axis
     const len = Math.hypot(dir[0], dir[1], dir[2]);
     if (len === 0 || !isFinite(amount)) return false;
-    const here = mandelboxDE(cam.pos[0], cam.pos[1], cam.pos[2], state);
+    const de = getFractal(state.fractal).deJS;
+    const here = de(cam.pos[0], cam.pos[1], cam.pos[2], state);
     if (here >= FLY_DE_MIN) amount = Math.min(amount, 0.9 * here);
     const next = [0, 1, 2].map((i) => cam.pos[i] + dir[i] / len * amount);
-    const there = mandelboxDE(next[0], next[1], next[2], state);
+    const there = de(next[0], next[1], next[2], state);
     if (there < FLY_DE_MIN && there < here) return false;
     cam.pos = next;
     return true;
@@ -372,7 +373,7 @@ function setupButtons(canvas, state, draw) {
     if(savedSelect) {
         savedSelect.addEventListener("change", () => {
             loadSavedSettings(state, draw);
-            savedSelect.blur(); //so a loaded Mandelbox can be flown at once (keys are ignored in a focused select)
+            savedSelect.blur(); //so a loaded fly type can be flown at once (keys are ignored in a focused select)
         });
     }
 
@@ -595,6 +596,20 @@ function setupVariablesInputs (canvas, state, draw, hasBulb) {
     });
     helpers.updateScaleUI(scaleInput, state);
 
+    //Box size: the Kleinian's folding box, CSize * kleinSize (the slider only shows for the Kleinian).
+    //The folds are very sensitive to it: a change of 0.01 already gives a different landscape, and
+    //below about 0.8 the caves close up, so the range is narrow and the step fine.
+    let kleinSizeInput = document.getElementById("kleinSizeInput");
+    kleinSizeInput.addEventListener("input", () => {
+        let value = parseFloat(kleinSizeInput.value);
+        if (!isNaN(value)) {
+            state.kleinSize = Math.max(0.8, Math.min(1.15, value));
+            helpers.updateKleinSizeUI(kleinSizeInput, state);
+            draw();
+        }
+    });
+    helpers.updateKleinSizeUI(kleinSizeInput, state);
+
     //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
     let saturationInput = document.getElementById("saturationInput");
     saturationInput.addEventListener("input", () => {
@@ -697,7 +712,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
         const zoomAmount = 1.1;
         const factor = e.deltaY < 0 ? zoomAmount : 1 / zoomAmount; //scroll up = zoom in
         if (isFly(state.fractal)) {
-            //the Mandelbox: the wheel sets the flying speed; the toast shows the new multiplier
+            //a fly type (Mandelbox, Kleinian): the wheel sets the flying speed; the toast shows the new multiplier
             flyWheelSpeed(state, e.deltaY);
             helpers.showToast(`Fly speed ×${+state.camFly.speed.toFixed(2)}`);
         } else if (isRaymarch(state.fractal)) {
@@ -826,10 +841,10 @@ function setupTouch (canvas, state, draw, preview) {
         }
 
         if (g.n === 1 && isFly(state.fractal)) {
-            //the Mandelbox: one finger looks around
+            //a fly type: one finger looks around
             flyLook(state, g.x - prev.x, g.y - prev.y);
         } else if (g.n === 2 && isFly(state.fractal)) {
-            //the Mandelbox, two fingers: spreading them flies FORWARD (pinching in, back), and moving
+            //a fly type, two fingers: spreading them flies FORWARD (pinching in, back), and moving
             //their midpoint strafes. Signs as for moveTarget: dragging the scene right means the camera
             //moves left (-dx), dragging it down means the camera moves up (+dy; screen y grows down).
             //100 px of gesture = one second of flying at the current speed.

@@ -30,6 +30,7 @@ export function saveSettings(state) {
         camBulb: { yaw: state.camBulb.yaw, pitch: state.camBulb.pitch, dist: state.camBulb.dist, target: [...(state.camBulb.target ?? BULB_TARGET)] },
         //the Mandelbox: its scale and the fly camera (position, look angles and speed)
         scale: state.scale,
+        kleinSize: state.kleinSize,
         camFly: { pos: [...state.camFly.pos], yaw: state.camFly.yaw, pitch: state.camFly.pitch, speed: state.camFly.speed },
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
@@ -95,6 +96,8 @@ export function loadSavedSettings(state, draw) {
     //of its default start. The position is copied so the preset object and the state never share it.
     const flyDefaults = getFractal("mandelbox").defaults;
     state.scale = chosen.scale ?? flyDefaults.scale;
+    //the Kleinian's Box size (older presets have none); camFly above is shared by both fly types
+    state.kleinSize = chosen.kleinSize ?? getFractal("kleinian").defaults.kleinSize;
     state.camFly = { ...flyDefaults.camFly, ...chosen.camFly, pos: [...(chosen.camFly?.pos ?? flyDefaults.camFly.pos)] };
     //Where the view sits. New presets store the centre directly. Presets saved before that
     //stored pixel offsets (offset = centre * zoom - size/2), so convert back:
@@ -151,6 +154,7 @@ export function loadSavedSettings(state, draw) {
     helpers.updatePowerUI(powerInput, state);
     helpers.updateCzUI(document.getElementById("czInput"), state);
     helpers.updateScaleUI(document.getElementById("scaleInput"), state);
+    helpers.updateKleinSizeUI(document.getElementById("kleinSizeInput"), state);
     helpers.updateHeightUI(document.getElementById("heightInput"), state);
     helpers.updateView3DUI(state);
 
