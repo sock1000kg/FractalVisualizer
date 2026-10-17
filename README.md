@@ -7,7 +7,7 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 
 ## Features
 - Interactive fractal drawing using mouse position and hue shifts
-- Zoom: the field shows a magnification (1× = the default view of each type), up to 10¹⁵× on the CPU renderer. The mouse wheel zooms toward the cursor, and you can type a value such as `2.5` or `1e9` in the field (scientific notation is accepted). A warning line appears when the zoom passes what the current renderer can draw accurately (about 10⁵× on WebGL, 10¹³× on the CPU); WebGL deep zoom arrives in the next update. Use `?renderer=cpu` to go deeper for now
+- Zoom: the field shows a magnification (1× = the default view of each type), up to 10¹⁵× on the CPU renderer. The mouse wheel zooms toward the cursor, and you can type a value such as `2.5` or `1e9` in the field (scientific notation is accepted). A warning line appears when the zoom passes what the current renderer can draw accurately: about 10¹¹× on WebGL for whole-number powers (it does the maths in emulated double precision once you pass 10⁴×), about 10⁵× on WebGL for fractional powers, and 10¹³× on the CPU. For the very deepest views use `?renderer=cpu`
 - Iterations up to 5000 (logarithmic slider) and an "Auto iterations" option that raises the count as you zoom in
 - Black and White mode
 - Download fractal images
