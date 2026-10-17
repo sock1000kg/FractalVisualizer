@@ -43,6 +43,16 @@ uniform float uHueSpeed;
 uniform float uSat;       // 0..100
 uniform float uLight;     // 0..100
 uniform int uMode;        // 0 = colour, 1 = black and white, 2 = simple
+uniform float uSmooth;    // state.smoothness / 100: 0 = banded, 1 = fully smooth
+
+// Extra steps run after a point escapes (see smoothValue in fractals.js).
+// highp has the range for 3. mediump floats overflow past about 65000, and each
+// step roughly squares |z|, so 3 steps could overflow to infinity/NaN: use 1 there.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+#define SMOOTH_EXTRA 3
+#else
+#define SMOOTH_EXTRA 1
+#endif
 
 // Keep in sync with hslToRgb in utilities.js. Returns 0..255 values.
 // (Same 6 hue branches; a hue outside 0..360 matches none, so r = g = b = 0,
@@ -91,24 +101,41 @@ void main() {
         iter++;
     }
 
+    // SMOOTH COLOURING (full explanation at smoothValue in fractals.js).
+    // The integer iter makes colour bands. For escaped points we run a few more
+    // steps so |z| is large, then nu = iter + extra - log2(ln|z| / ln 2) is a
+    // fractional iteration count. uSmooth blends: t = iter (bands) .. nu (smooth).
+    // Milestone 7: the 2 in log2 and ln 2 will become the power n.
+    float fi = float(iter);
+    float t = fi;
+    bool inside = (iter == uMaxIter);
+    if (!inside) {
+        // constant loop bound, as GLSL ES 1.00 requires
+        for (int e = 0; e < SMOOTH_EXTRA; e++) {
+            ${glsl.step}
+        }
+        // ln|z| / ln 2 = log2|z|; max(.., 1.0) keeps log2 away from values <= 0 (NaN)
+        float log2z = max(0.5 * log(dot(z, z)) / 0.6931471805599453, 1.0);
+        float nu = max(fi + float(SMOOTH_EXTRA) - log2(log2z), 0.0);
+        t = fi + uSmooth * (nu - fi);
+    }
+
     // Keep in sync with colors.js (same modes, same priority: simple > bw > colour).
     float maxIter = float(uMaxIter);
-    float fi = float(iter);
-    bool inside = (iter == uMaxIter);
     vec3 rgb;
 
     if (uMode == 2) {
         // simple: greyscale, inside the set is black.
         // The tiny 0.001 stops a GPU division like 2.9999999 flooring to 2.
-        float v = inside ? 0.0 : 255.0 - floor(fi * 255.0 / maxIter + 0.001);
+        float v = inside ? 0.0 : 255.0 - floor(t * 255.0 / maxIter + 0.001);
         rgb = vec3(v);
     } else if (uMode == 1) {
         // black and white
-        float shade = inside ? uHueBase : mod(uHueBase + fi * uHueSpeed, 256.0);
+        float shade = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 256.0);
         rgb = vec3(255.0 - floor(shade)); // can go below 0 (hueBase up to 1000)
     } else {
         // colour
-        float hue = inside ? uHueBase : mod(uHueBase + fi * uHueSpeed, 360.0);
+        float hue = inside ? uHueBase : mod(uHueBase + t * uHueSpeed, 360.0);
         rgb = hslToRgb(hue, uSat, uLight);
     }
 
@@ -177,7 +204,7 @@ export function createGLRenderer(canvas, gl) {
         //look up where each uniform lives once, not on every draw
         const uniforms = {};
         for (const name of ["uResolution", "uOffset", "uZoom", "uC", "uMaxIter",
-                            "uHueBase", "uHueSpeed", "uSat", "uLight", "uMode"]) {
+                            "uHueBase", "uHueSpeed", "uSat", "uLight", "uMode", "uSmooth"]) {
             uniforms[name] = gl.getUniformLocation(program, name);
         }
         cache[key] = { program, uniforms, aPos: gl.getAttribLocation(program, "aPos") };
@@ -214,6 +241,7 @@ export function createGLRenderer(canvas, gl) {
         gl.uniform1f(u.uSat, state.saturation);
         gl.uniform1f(u.uLight, state.lightness);
         gl.uniform1i(u.uMode, mode);
+        gl.uniform1f(u.uSmooth, state.smoothness / 100);
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
