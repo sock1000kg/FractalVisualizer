@@ -48,6 +48,14 @@
 //   defaults: c and cz (the 3D constant (c.re, c.im, cz)), power, and cam (yaw, pitch, dist of
 //             the orbit camera). There is no center / zoom: the "zoom" of a bulb is the
 //             camera distance. Bulbs have no kind or partner (no inset, no jump).
+//
+// Every raymarched entry provides its distance estimator in ONE of two ways (glsl3d):
+//   {init, drPlus}  a bulb: the shared bulb estimator in bulbRenderer.js is built from the two snippets
+//   {de}            a full GLSL function  float de(vec3 pos, out float trap)  used as it is (Mandelbox)
+// and may add  march: {steps, bound, far, fog, trapScale, iterCap}  to tune the raymarcher for it
+// (see MARCH_DEFAULTS in bulbRenderer.js for what each means and the values the bulbs use).
+// An entry with  camera: "fly"  is flown with WASD (state.camFly) instead of orbited (state.camBulb);
+// its defaults then carry  scale  and  camFly  instead of  cam.
 
 //SMOOTH COLOURING
 //
@@ -418,11 +426,126 @@ export const FRACTALS = {
             drPlus: "0.0",
         },
     },
+    //MANDELBOX: a 3D fractal made of FOLDS instead of powers. Each step takes the point z and
+    //  1. BOX FOLD:    every coordinate is mirrored back into the box -1..1. A coordinate beyond
+    //                  +1 is reflected about +1 (z -> 2 - z), one beyond -1 about -1 (z -> -2 - z).
+    //                  That is clamp(z, -1, 1) * 2 - z. The space is folded like paper along the
+    //                  six faces of a cube, so the shape inside the box repeats outside it.
+    //  2. SPHERE FOLD: a point inside a sphere is pushed outwards: very close to the centre
+    //                  (r^2 < 0.25) it is scaled up by a fixed factor, between r^2 = 0.25 and 1
+    //                  it is INVERTED (z -> z / r^2, the point goes to the same direction at the
+    //                  distance 1/r). Inversion turns the inside of a ball inside out, which
+    //                  makes the bubbles and curved halls.
+    //  3. SCALE AND TRANSLATE: z -> scale * z + p. The scale stretches the folded space and
+    //                  p (the point being tested) is added back, exactly like the "+ c" of the
+    //                  2D Mandelbrot. A negative scale also flips the space, which gives the
+    //                  most architectural look; the classic boxes use -1.5 or 2.
+    //The 3D constant (c.re, c.im, cz) is added as well (uC3): 0 is the classic Mandelbox, other
+    //values warp it, so the mouse / "c z" morph it just like the bulbs.
+    mandelbox: {
+        name: "Mandelbox",
+        render: "raymarch",
+        needsWebGL: true,
+        camera: "fly",
+        formula: (s) => ({title: "Mandelbox", eq: "z → s·fold(z) + p", vars: `s = ${s.scale.toFixed(2).replace("-", "−")} · fold = box + sphere fold · p = 3D point`}),
+        //start OUTSIDE (at z = 7, yaw = pi looks towards -z, at the structure around the origin);
+        //milestone18_check.py verifies that DE > 0 there and that most of the view hits the box
+        defaults: { c: { re: 0, im: 0 }, cz: 0, scale: -1.5, camFly: { pos: [0, 0, 7], yaw: Math.PI, pitch: 0, speed: 1 } },
+        //steps 192: the folded space needs more steps than the bulbs. bound 0: NO bounding sphere,
+        //the camera is often inside the box and its size depends on the scale. far 60: a ray that
+        //travels farther has missed. fog 0.05: distant parts fade into the background, which gives
+        //depth. trapScale 4: the orbit trap of the box varies little (about 4..6), so it is
+        //stretched to cover a good part of the hue wheel. iterCap 24: see the loop in de().
+        march: { steps: 192, bound: 0.0, far: 60.0, fog: 0.05, trapScale: 4.0, iterCap: 24 },
+        glsl3d: {
+            //MIN_R2 / FIXED_R2 / ITER_CAP are #defined by the shader template.
+            de: `
+float de(vec3 pos, out float trap) {
+    vec3 z = pos;
+    float dr = 1.0;   // |dz / dpos|: how much the folds and scales have stretched space so far
+    trap = 1.0e10;
+    // More than about 24 folds adds nothing you can see (the later steps only change the point
+    // far below a pixel), so the loop is capped (a constant bound, as GLSL ES 1.00 needs). Not
+    // lower, though: with 20 the estimate was too big near the surface and rays stepped into the
+    // solid (about 8% of test rays at scale -1.5; with 24 it is under 1%), because an orbit that
+    // has not yet escaped makes |z| / |dr| overshoot. The iterations slider (uMaxIter) can lower it.
+    for (int i = 0; i < ITER_CAP; i++) {
+        if (i >= uMaxIter || i >= uIterCap) break;
+        // 1. box fold: mirror each coordinate back into -1..1
+        z = clamp(z, -1.0, 1.0) * 2.0 - z;
+        // 2. sphere fold. A fold only moves the point (it keeps lengths, except this one that
+        // scales by a known factor), so the derivative dr just gets the same factor.
+        float r2 = dot(z, z);
+        if (r2 < MIN_R2) {
+            // very close to the centre: scale up by FIXED_R2 / MIN_R2 (linear, so the inversion's
+            // blow-up at r -> 0 is avoided)
+            z *= FIXED_R2 / MIN_R2;
+            dr *= FIXED_R2 / MIN_R2;
+        } else if (r2 < FIXED_R2) {
+            // inversion in the sphere of radius 1: z / r^2 (the length becomes 1 / r)
+            z *= FIXED_R2 / r2;
+            dr *= FIXED_R2 / r2;
+        }
+        // 3. scale and translate: the "z -> s*z + p" of the iteration (+ the morph constant)
+        z = uScale * z + pos + uC3;
+        dr = dr * abs(uScale) + 1.0;
+        trap = min(trap, dot(z, z));
+    }
+    // Why length(z) / |dr|: after n steps z is (nearly) a linear function of the starting point,
+    // z ~ dr * pos, because every fold is either a mirror (length 1) or a scale whose factor dr
+    // collects. So when the point moves by d, z moves by about |dr| * d. The surface is where z
+    // stays bounded, so the distance to it is about |z| / |dr| (a point that has flown far away
+    // after being stretched by |dr| is only that much closer to the surface in real space).
+    return length(z) / abs(dr);
+}
+`,
+        },
+    },
 };
 
-//true for the 3D bulb types (the ones rendered by raymarching, not per point of the plane)
+//The Mandelbox distance estimator in JavaScript doubles: the SAME maths as the GLSL de() above
+//(keep them in sync). The fly camera calls it to know how far the nearest surface is, for its
+//adaptive speed and collision (inputs.js). state needs scale, c, cz and maxIter.
+const MIN_R2 = 0.25;
+const FIXED_R2 = 1.0;
+export function mandelboxDE(x, y, z, state) {
+    const px = x, py = y, pz = z;
+    const s = state.scale;
+    const cx = state.c.re, cy = state.c.im, cz = state.cz;
+    const iters = Math.min(FRACTALS.mandelbox.march.iterCap, state.maxIter); //the same cap as the shader's uIterCap
+    let dr = 1.0;
+    for (let i = 0; i < iters; i++) {
+        //box fold: clamp(z, -1, 1) * 2 - z
+        x = Math.max(-1, Math.min(1, x)) * 2 - x;
+        y = Math.max(-1, Math.min(1, y)) * 2 - y;
+        z = Math.max(-1, Math.min(1, z)) * 2 - z;
+        //sphere fold
+        const r2 = x*x + y*y + z*z;
+        if (r2 < MIN_R2) {
+            const f = FIXED_R2 / MIN_R2;
+            x *= f; y *= f; z *= f; dr *= f;
+        } else if (r2 < FIXED_R2) {
+            const f = FIXED_R2 / r2;
+            x *= f; y *= f; z *= f; dr *= f;
+        }
+        //scale and translate
+        x = s * x + px + cx;
+        y = s * y + py + cy;
+        z = s * z + pz + cz;
+        dr = dr * Math.abs(s) + 1.0;
+    }
+    return Math.sqrt(x*x + y*y + z*z) / Math.abs(dr);
+}
+
+//true for the 3D types (the ones rendered by raymarching, not per point of the plane)
 export function isRaymarch(key) {
     return getFractal(key).render === "raymarch";
+}
+
+//true for the raymarched types that are flown with the WASD camera (the Mandelbox) instead of
+//orbited (the bulbs)
+export function isFly(key) {
+    return getFractal(key).camera === "fly";
 }
 
 //Looks a fractal up by key. Unknown or missing keys fall back to Julia
