@@ -1,68 +1,150 @@
-//View helpers: convert between the pan/zoom state and the complex plane.
+//View helpers: the ONE place that turns the view (state.center + state.zoom) into the complex
+//plane and back. draw.js and the WebGL shader repeat the same formula, so keep them in sync.
 //
-//draw.js maps a pixel to the complex plane with
-//    re = (px + state.offsetX) / state.zoom
-//    im = (py + state.offsetY) / state.zoom
-//so the point under the middle of the canvas is
-//    ((width/2 + offsetX) / zoom, (height/2 + offsetY) / zoom)
-//Changing zoom without touching offset moves that point, which is why zooming
-//used to drift unless the view was centred on (0, 0). These helpers let us
-//read the centre, change zoom/size, then put the centre back.
+//THE VIEW MODEL
+//  state.center = {re, im}   the complex number at the middle of the canvas
+//  state.zoom                pixels per unit of the complex plane
+//and a pixel (sx, sy) on a canvas of size width x height is the complex number
+//    re = center.re + (sx - width/2)  / zoom
+//    im = center.im + (sy - height/2) / zoom
+//
+//WHY THE CENTRE (and not a pixel offset like before)
+//A JavaScript number (a "double") keeps about 16 significant digits. A GPU float keeps only
+//about 7. The old model stored offset = centre * zoom - width/2. At a zoom of 10^13 that
+//offset is a number with 13+ digits in front of the point, so a float has nothing left for
+//the digits that matter and the image falls apart. Now the centre is stored as it is, and
+//the thing added to it, (sx - width/2) / zoom, is SMALL (a few pixels divided by a big zoom),
+//so it keeps all its digits. Only the centre needs extra precision (next milestone).
 import {getFractal} from './fractals.js';
 
-//complex point at the middle of the canvas
-export function getViewCenter(canvas, state) {
-    return {
-        re: (canvas.width / 2 + state.offsetX) / state.zoom,
-        im: (canvas.height / 2 + state.offsetY) / state.zoom,
-    };
+//MAGNIFICATION: what the user sees. 1x is every type's own default view, so
+//magnification = zoom / default zoom. The range is limited below by 0.1 (zoomed far out) and
+//above by 1e15: past that even JavaScript doubles (16 digits) cannot tell two neighbouring
+//pixels apart, so there is nothing more to see.
+export const MIN_MAGNIFICATION = 0.1;
+export const MAX_MAGNIFICATION = 1e15;
+
+export function magnification(state) {
+    return state.zoom / getFractal(state.fractal).defaults.zoom;
 }
 
-//the inverse: choose offsets so (re, im) sits in the middle of the canvas
-export function setViewCenter(canvas, state, re, im) {
-    state.offsetX = re * state.zoom - canvas.width / 2;
-    state.offsetY = im * state.zoom - canvas.height / 2;
+//the zoom (pixels per unit) clamped to the allowed magnification range for the current type
+export function clampZoom(state, zoom) {
+    const base = getFractal(state.fractal).defaults.zoom;
+    return Math.max(MIN_MAGNIFICATION * base, Math.min(MAX_MAGNIFICATION * base, zoom));
+}
+
+//complex point at the middle of the canvas (a copy, so callers cannot change the view by accident)
+export function getViewCenter(state) {
+    return {re: state.center.re, im: state.center.im};
+}
+
+//put (re, im) in the middle of the canvas
+export function setViewCenter(state, re, im) {
+    state.center = {re, im};
 }
 
 //jump to the selected fractal's default c, zoom and centre
-export function applyFractalDefaults(canvas, state) {
+export function applyFractalDefaults(state) {
     const d = getFractal(state.fractal).defaults;
     state.c = { re: d.c.re, im: d.c.im }; //new object so the registry's defaults are never mutated
-    state.zoom = d.zoom; //zoom first: setViewCenter depends on it
-    setViewCenter(canvas, state, d.center.re, d.center.im);
+    state.zoom = d.zoom;
+    setViewCenter(state, d.center.re, d.center.im);
 }
 
-//zoom to newZoom while keeping the complex point under screen pixel (sx, sy) fixed.
-//Used by the pinch gesture: the point between the fingers stays between the fingers.
-//  1. find the complex number currently under the pixel:  re = (sx + offsetX) / zoom
-//  2. change the zoom
-//  3. pick the offset that puts the SAME number back under the pixel:
-//         (sx + offsetX') / newZoom = re   =>   offsetX' = re * newZoom - sx
-//(getViewCenter/setViewCenter do the same thing for the fixed point (width/2, height/2))
-export function zoomAt(canvas, state, sx, sy, newZoom) {
-    const re = (sx + state.offsetX) / state.zoom;
-    const im = (sy + state.offsetY) / state.zoom;
-    state.zoom = newZoom;
-    state.offsetX = re * newZoom - sx;
-    state.offsetY = im * newZoom - sy;
+//drag the picture by (dxPixels, dyPixels) on screen. Dragging the image right means the
+//view moves left in the plane, hence the minus. Dividing by zoom turns pixels into plane units.
+export function panBy(state, dxPixels, dyPixels) {
+    state.center.re -= dxPixels / state.zoom;
+    state.center.im -= dyPixels / state.zoom;
 }
 
-//the complex number under screen pixel (sx, sy): the same mapping draw.js (and the WebGL
-//shader) use for every pixel,  re = (sx + offsetX) / zoom,  im = (sy + offsetY) / zoom.
-//Used by the Julia preview and click-to-jump, which need "the point under the cursor".
-export function screenToComplex(state, sx, sy) {
+//the complex number under screen pixel (sx, sy): the mapping at the top of this file.
+//`size` is anything with width and height (the canvas itself, or {width, height}).
+//Used by the Julia preview and click-to-pin, which need "the point under the cursor".
+export function screenToComplex(state, size, sx, sy) {
     return {
-        re: (sx + state.offsetX) / state.zoom,
-        im: (sy + state.offsetY) / state.zoom,
+        re: state.center.re + (sx - size.width / 2) / state.zoom,
+        im: state.center.im + (sy - size.height / 2) / state.zoom,
     };
 }
 
 //the inverse of screenToComplex: the screen pixel where the complex number (re, im) is drawn.
-//From re = (sx + offsetX) / zoom we get sx = re * zoom - offsetX (and the same for y).
 //Used to place the crosshair markers on top of the canvases.
-export function complexToScreen(state, re, im) {
+export function complexToScreen(state, size, re, im) {
     return {
-        x: re * state.zoom - state.offsetX,
-        y: im * state.zoom - state.offsetY,
+        x: (re - state.center.re) * state.zoom + size.width / 2,
+        y: (im - state.center.im) * state.zoom + size.height / 2,
     };
+}
+
+//zoom to newZoom while keeping the complex point under screen pixel (sx, sy) fixed.
+//Used by the pinch gesture (the point between the fingers stays there) and the mouse wheel
+//(the point under the cursor stays there).
+//  1. find the complex number p under the pixel
+//  2. change the zoom
+//  3. move the centre so p is under the same pixel again:
+//         p = center' + (sx - width/2) / newZoom   =>   center' = p - (sx - width/2) / newZoom
+//Zooming around the screen centre is the special case (sx, sy) = (width/2, height/2),
+//where the centre does not move at all.
+export function zoomAt(canvas, state, sx, sy, newZoom) {
+    const p = screenToComplex(state, canvas, sx, sy);
+    state.zoom = newZoom;
+    state.center = {
+        re: p.re - (sx - canvas.width / 2) / newZoom,
+        im: p.im - (sy - canvas.height / 2) / newZoom,
+    };
+}
+
+//MAGNIFICATION TEXT
+const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+//Text for the zoom field. Below 10^4 a plain number with up to 2 decimals (1, 2.5, 350);
+//from 10^4 up scientific notation with a superscript exponent (3.2×10⁹), because 3200000000
+//is hard to read. toExponential(1) gives "3.2e+9": a mantissa with 1 decimal and the exponent
+//(it also carries 9.96e3 over to 1.0e4 for us); a trailing ".0" is dropped.
+export function formatMagnification(m) {
+    if (m < 1e4) return String(+m.toFixed(2));
+    const [mant, exp] = m.toExponential(1).split("e");
+    const sup = String(Math.abs(+exp)).replace(/\d/g, (d) => SUPERSCRIPT[d]);
+    return `${mant.replace(/\.0$/, "")}×10${exp.startsWith("-") ? "⁻" : ""}${sup}`;
+}
+
+//Reads what a user typed in the zoom field. Accepts 1500, 2.5, 1e9, 1E9, 3.2x10^9, 3.2×10^9
+//and also the superscript form we display (3.2×10⁹). Returns NaN for anything else
+//(or for zero / negative numbers), and then the caller changes nothing.
+export function parseMagnification(text) {
+    let s = String(text).trim().toLowerCase().replace(/×/g, "x").replace(/\s+/g, "");
+    //superscript digits (and ⁻) -> ordinary ones, so "10⁹" becomes "10^9"
+    s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (run) =>
+        "^" + [...run].map((ch) => ch === "⁻" ? "-" : SUPERSCRIPT.indexOf(ch)).join(""));
+    const m = /^(\d+\.?\d*|\.\d+)(?:e([+-]?\d+)|x10\^?([+-]?\d+))?$/.exec(s);
+    if (!m) return NaN;
+    const value = Number(m[1]) * 10 ** Number(m[2] ?? m[3] ?? 0);
+    return value > 0 && Number.isFinite(value) ? value : NaN;
+}
+
+//ITERATIONS
+//The iterations slider is logarithmic: it runs over 0..1000 and the value is
+//iter = round(10 * 500^(v/1000)), i.e. 10 at the left end and 5000 at the right end.
+//Why a log scale: a plain 10..5000 slider would spend almost all its length on values
+//nobody needs (say 3000 vs 3100) and leave only a sliver for 10..100, where one step
+//changes the picture a lot. Equal slider steps now mean equal PERCENTAGE changes.
+export const MIN_ITER = 10;
+export const MAX_ITER = 5000;
+export const ITER_SLIDER_MAX = 1000;
+
+export function sliderToIter(v) {
+    return Math.round(MIN_ITER * (MAX_ITER / MIN_ITER) ** (v / ITER_SLIDER_MAX));
+}
+
+export function iterToSlider(iter) {
+    return Math.round(ITER_SLIDER_MAX * Math.log(iter / MIN_ITER) / Math.log(MAX_ITER / MIN_ITER));
+}
+
+//AUTO ITERATIONS: deeper views have finer detail, which needs more iterations to resolve.
+//60 at 1x, 300 at 100x, about 1600 at 10^13x (+120 per factor of 10 in magnification).
+export function autoIterations(mag) {
+    const n = Math.round(60 + 120 * Math.log10(Math.max(mag, 1)));
+    return Math.max(MIN_ITER, Math.min(MAX_ITER, n));
 }

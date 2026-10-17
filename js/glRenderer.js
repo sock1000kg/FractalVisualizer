@@ -7,7 +7,7 @@
 //      fragment shader -> runs once per PIXEL; this is where the fractal maths lives
 //    Together they form a "program".
 //  - A "uniform" is a value we set from JavaScript that is the same for every
-//    pixel (zoom, offset, colours...).
+//    pixel (zoom, centre, colours...).
 //  - To colour every pixel we draw a "full-screen quad": two triangles that
 //    cover the whole canvas, so the fragment shader runs for each pixel.
 //
@@ -34,7 +34,11 @@ precision mediump float;
 #endif
 
 uniform vec2 uResolution; // canvas size in pixels
-uniform vec2 uOffset;     // state.offsetX, state.offsetY
+// The view centre (state.center) as (re, im). NOTE: this is a 32-bit float (~7 digits) in
+// this version, so past a magnification of about 1e5 neighbouring pixels get the same
+// centre-relative value and the image turns blocky. The next milestone fixes that by
+// passing the centre with extra precision.
+uniform vec2 uCenter;
 uniform float uZoom;
 uniform vec2 uC;          // state.c as (re, im)
 uniform int uMaxIter;
@@ -101,18 +105,20 @@ void main() {
     // with whole numbers, so convert to match it exactly.
     float px = floor(gl_FragCoord.x);
     float py = uResolution.y - 1.0 - floor(gl_FragCoord.y);
-    vec2 p = (vec2(px, py) + uOffset) / uZoom; // the pixel as a complex number
+    // The pixel as a complex number: the centre plus a SMALL distance (same formula as
+    // view.js). The distance (pixel - screen centre) / zoom stays accurate even when deep.
+    vec2 p = uCenter + (vec2(px, py) - 0.5 * uResolution) / uZoom;
 
     vec2 z;
     vec2 k;
     ${glsl.init}
 
-    // GLSL ES 1.00 loops need a constant bound, so loop to 500 and break out
-    // early. 500 is the iterations slider's maximum (index.html): update it
+    // GLSL ES 1.00 loops need a constant bound, so loop to 5000 and break out
+    // early. 5000 is the iterations maximum (MAX_ITER in view.js): update it
     // here if that max changes.
     // The bailout test comes BEFORE the step, like the CPU's while loop.
     int iter = 0;
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 5000; i++) {
         if (i >= uMaxIter) break;
         if (dot(z, z) >= 4.0) break;
         ${glsl.step}
@@ -227,7 +233,7 @@ export function createGLRenderer(canvas, gl) {
 
         //look up where each uniform lives once, not on every draw
         const uniforms = {};
-        for (const name of ["uResolution", "uOffset", "uZoom", "uC", "uMaxIter",
+        for (const name of ["uResolution", "uCenter", "uZoom", "uC", "uMaxIter",
                             "uHueBase", "uHueSpeed", "uSat", "uLight", "uMode", "uSmooth", "uPower"]) {
             uniforms[name] = gl.getUniformLocation(program, name);
         }
@@ -256,7 +262,7 @@ export function createGLRenderer(canvas, gl) {
 
         const u = p.uniforms;
         gl.uniform2f(u.uResolution, canvas.width, canvas.height);
-        gl.uniform2f(u.uOffset, state.offsetX, state.offsetY);
+        gl.uniform2f(u.uCenter, state.center.re, state.center.im);
         gl.uniform1f(u.uZoom, state.zoom);
         gl.uniform2f(u.uC, state.c.re, state.c.im);
         gl.uniform1i(u.uMaxIter, state.maxIter);
