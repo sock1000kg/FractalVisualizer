@@ -160,9 +160,8 @@ function setupVariablesInputs (state, draw) {
         
         let value = parseFloat(hueBaseInput.value);
         if (!isNaN(value)) {
-            value = Math.max(1, Math.min(1000, value));
+            value = Math.max(0, Math.min(1000, value)); //slider min is 0, so clamp to 0 (was 1)
             state.hueBase = value;
-            hueBaseValue.textContent = value;
             helpers.updateHueBaseUI(hueBaseInput, state);
             draw();
         }
@@ -173,16 +172,63 @@ function setupVariablesInputs (state, draw) {
     hueSpeedInput.addEventListener("input", () => {
         if (state.simple) {
             alert("Please disable Simple mode first.");
-            hueBaseInput.value = state.hueBase; // revert change
+            hueSpeedInput.value = state.hueSpeed; // revert THIS slider (used to wrongly revert hue base)
             return;
         }
-        
+
         let value = parseFloat(hueSpeedInput.value);
         if (!isNaN(value)) {
             value = Math.max(1, Math.min(500, value));
             state.hueSpeed = value;
-            hueSpeedValue.textContent = value;
             helpers.updateHueSpeedUI(hueSpeedInput, state);
+            draw();
+        }
+    });
+
+    //Iterations (fractal depth) - works in every mode
+    let iterInput = document.getElementById("iterInput");
+    iterInput.addEventListener("input", () => {
+        let value = parseFloat(iterInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(10, Math.min(500, value)); //same range as the slider
+            state.maxIter = value;
+            helpers.updateMaxIterUI(iterInput, state);
+            draw();
+        }
+    });
+
+    //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
+    let saturationInput = document.getElementById("saturationInput");
+    saturationInput.addEventListener("input", () => {
+        if (state.simple) {
+            alert("Please disable Simple mode first.");
+            saturationInput.value = state.saturation; // revert change
+            return;
+        }
+
+        let value = parseFloat(saturationInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(0, Math.min(100, value));
+            state.saturation = value;
+            helpers.updateSaturationUI(saturationInput, state);
+            draw();
+        }
+    });
+
+    //Lightness - same rules as saturation
+    let lightnessInput = document.getElementById("lightnessInput");
+    lightnessInput.addEventListener("input", () => {
+        if (state.simple) {
+            alert("Please disable Simple mode first.");
+            lightnessInput.value = state.lightness; // revert change
+            return;
+        }
+
+        let value = parseFloat(lightnessInput.value);
+        if (!isNaN(value)) {
+            value = Math.max(0, Math.min(100, value));
+            state.lightness = value;
+            helpers.updateLightnessUI(lightnessInput, state);
             draw();
         }
     });
