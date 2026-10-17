@@ -41,6 +41,36 @@ body {
     box-shadow: 0 0 10px #00000055;
 }
 
+/* === JULIA PREVIEW INSET (BOTTOM LEFT) === */
+/* pointer-events: none lets every click, drag and touch fall through to the main canvas */
+#previewBox {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 5;
+    pointer-events: none;
+
+    background: rgba(23, 23, 27, 0.8);
+    padding: 6px;
+    border: 1px solid #ffffff33;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #00000055;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+#previewBox canvas {
+    display: block;
+}
+
+#previewLabel {
+    margin-top: 4px;
+}
+
+.hidden {
+    display: none;
+}
+
 /* === BUTTONS (Shared Style) === */
 #controls button,
 #advanced button {
@@ -108,6 +138,12 @@ body {
     flex-direction: column;
     gap: 12px;
     margin-top: 8px;
+}
+
+#advanced label.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
 }
 
 #advanced label {
@@ -207,6 +243,26 @@ input[type="number"] {
     #advanced label,
     #advanced input {
         width: 100%;
+    }
+
+    /* a checkbox must keep its natural size, not stretch to the full row */
+    #advanced input[type="checkbox"] {
+        width: auto;
+    }
+
+    /* The bottom is taken by the Advanced panel (up to 45vh) and the top by the control bar,
+       so the smaller inset sits at the top-right, below the bar. The bar wraps onto up to
+       about 3 rows (~130px), so the inset starts below that. */
+    #previewBox {
+        left: auto;
+        bottom: auto;
+        right: 8px;
+        top: 150px;
+    }
+
+    #previewBox canvas {
+        width: 160px;
+        height: 107px;
     }
 
     /* iOS Safari zooms the page when focusing an input under 16px */
