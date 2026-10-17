@@ -1,4 +1,4 @@
-// 3D RAYMARCH renderer (Mandelbulb, Juliabulb, Mandelbox): a fragment shader that RAYMARCHES a 3D fractal.
+// 3D RAYMARCH renderer (Mandelbulb, Juliabulb, Mandelbox, Kleinian): a fragment shader that RAYMARCHES a 3D fractal.
 //
 // (The file keeps its old name, but it renders every raymarched type. The bulbs are described first;
 // the Mandelbox only differs in its distance estimator and a few constants, see MARCH_DEFAULTS and
@@ -63,7 +63,11 @@ export const FOV_Y = 0.8;
 //             far away. It makes far walls fade out, which is what gives a big space its depth.
 //  trapScale  the orbit trap is multiplied by this to become the "t" of colorFromT (hue = t * hue speed)
 //  iterCap    the most iterations of the distance estimator (the bulbs: 64, see de() below)
-export const MARCH_DEFAULTS = { steps: 128, bound: 1.5, far: 10.0, fog: 0.0, trapScale: 10.0, iterCap: 64 };
+//  headlight  0..1: how much the light is moved from its fixed direction to the camera. 0 (the
+//             bulbs, the Mandelbox) = the fixed key light. 1 = a lamp on the camera: the walls you
+//             look at are lit, which a cave needs. The light direction becomes
+//             normalize(mix(L_fixed, -rd, headlight)), with rd the direction the pixel's ray looks in.
+export const MARCH_DEFAULTS = { steps: 128, bound: 1.5, far: 10.0, fog: 0.0, trapScale: 10.0, iterCap: 64, headlight: 0.0 };
 
 //a number as a GLSL float literal ("10" would be an int there, and GLSL ES 1.00 never converts)
 const glslFloat = (n) => Number.isInteger(n) ? n.toFixed(1) : String(n);
@@ -119,9 +123,8 @@ precision highp float;
 precision mediump float;
 #endif
 ` + COLOUR_UNIFORM_DECLS + `
-uniform vec3 uC3;          // the 3D constant (c.re, c.im, cz)${glsl3d.de ? `
-uniform float uScale;      // the Mandelbox scale (state.scale)
-uniform int uIterCap;      // the most folds of the Mandelbox estimator (march.iterCap)` : ""}
+uniform vec3 uC3;          // the 3D constant (c.re, c.im, cz)${glsl3d.uniforms ? `
+${glsl3d.uniforms}` : ""}
 uniform vec3 uCamPos;      // where the eye is
 uniform vec3 uForward;     // the camera's axes (see bulbBasis in mat4.js)
 uniform vec3 uRight;
@@ -135,9 +138,9 @@ uniform float uTanHalfFov; // tan(fieldOfView / 2): how wide the lens sees
 #define ITER_CAP ${m.iterCap}
 #define FAR ${glslFloat(m.far)}
 #define FOG ${glslFloat(m.fog)}
-#define TRAP_SCALE ${glslFloat(m.trapScale)}${glsl3d.de ? `
-#define MIN_R2 0.25
-#define FIXED_R2 1.0` : ""}
+#define TRAP_SCALE ${glslFloat(m.trapScale)}${glsl3d.defines ? `
+${glsl3d.defines}` : ""}${m.headlight ? `
+#define HEADLIGHT ${glslFloat(m.headlight)}` : ""}
 
 // DISTANCE ESTIMATOR of the bulb at the point pos. Returns the estimated distance to the
 // surface (negative inside) and the orbit trap through the out parameter.
@@ -241,7 +244,10 @@ void main() {
     // LIGHTING. A fixed key light (a direction pointing TOWARDS the light), Lambert's rule
     // (a surface is brighter the more it faces the light: dot(n, L)) and 0.25 ambient so the
     // shadowed side is dim and not black.
-    vec3 L = normalize(vec3(0.5, 0.8, 0.6));
+    vec3 L = normalize(vec3(0.5, 0.8, 0.6));${m.headlight ? `
+    // HEADLIGHT (only for types that set march.headlight): mix the light's direction towards the
+    // camera. -rd points from the surface back to the eye, so the light shines from where we look.
+    L = normalize(mix(L, -rd, HEADLIGHT));` : ""}
     float diffuse = 0.25 + 0.75 * max(dot(n, L), 0.0);
     // AMBIENT OCCLUSION from the step count: a ray that needed many steps passed close to the
     // surface for a long time, which happens in crevices and along edges where the shape
@@ -265,9 +271,10 @@ void main() {
 }
 
 //the uniforms of the raymarch shaders that are not in the shared colour set (setColourUniforms
-//sets the colour ones: resolution, iterations, hue, ..., power). uScale and uIterCap exist only
-//in the Mandelbox shader (on a bulb program their location is null and they are never set).
-export const BULB_UNIFORMS = ["uC3", "uCamPos", "uForward", "uRight", "uUp", "uTanHalfFov", "uScale", "uIterCap"];
+//sets the colour ones: resolution, iterations, hue, ..., power). uScale, uKleinSize and uIterCap
+//exist only in the fly types' shaders (Mandelbox: uScale, uIterCap; Kleinian: uKleinSize, uIterCap).
+//Where a program lacks one its location is null, and setting a null location does nothing.
+export const BULB_UNIFORMS = ["uC3", "uCamPos", "uForward", "uRight", "uUp", "uTanHalfFov", "uScale", "uKleinSize", "uIterCap"];
 
 //Sets up the raymarch renderer on a WebGL canvas and returns {draw}. draw(state) renders one frame
 //and THROWS if a shader cannot be built (main.js then goes back to Julia and shows a toast).
@@ -329,6 +336,7 @@ export function createBulbRenderer(canvas, gl) {
         gl.uniform1f(u.uTanHalfFov, Math.tan(FOV_Y / 2));
         if (fly) {
             gl.uniform1f(u.uScale, state.scale);
+            gl.uniform1f(u.uKleinSize, state.kleinSize);
             gl.uniform1i(u.uIterCap, { ...MARCH_DEFAULTS, ...getFractal(state.fractal).march }.iterCap);
         }
 

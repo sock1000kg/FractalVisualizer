@@ -52,10 +52,16 @@
 // Every raymarched entry provides its distance estimator in ONE of two ways (glsl3d):
 //   {init, drPlus}  a bulb: the shared bulb estimator in bulbRenderer.js is built from the two snippets
 //   {de}            a full GLSL function  float de(vec3 pos, out float trap)  used as it is (Mandelbox)
-// and may add  march: {steps, bound, far, fog, trapScale, iterCap}  to tune the raymarcher for it
-// (see MARCH_DEFAULTS in bulbRenderer.js for what each means and the values the bulbs use).
+// and may add  march: {steps, bound, far, fog, trapScale, iterCap, headlight}  to tune the raymarcher
+// for it (see MARCH_DEFAULTS in bulbRenderer.js for what each means and the values the bulbs use).
+// A  {de}  entry may also bring its own GLSL declarations: glsl3d.uniforms (extra "uniform ..." lines)
+// and glsl3d.defines (extra "#define ..." lines), which the shader template pastes in as they are.
 // An entry with  camera: "fly"  is flown with WASD (state.camFly) instead of orbited (state.camBulb);
-// its defaults then carry  scale  and  camFly  instead of  cam.
+// its defaults then carry  camFly  (and its own shape parameter: scale for the Mandelbox, kleinSize
+// for the Kleinian) instead of  cam. A fly entry MUST also provide
+//   deJS: (x, y, z, state) => distance   the SAME distance estimator as its GLSL de(), in JS doubles
+// because the fly camera asks it how far the nearest surface is (adaptive speed, collision, the
+// precision warning) through getFractal(state.fractal).deJS, whatever the fly type is.
 
 //SMOOTH COLOURING
 //
@@ -457,7 +463,12 @@ export const FRACTALS = {
         //depth. trapScale 4: the orbit trap of the box varies little (about 4..6), so it is
         //stretched to cover a good part of the hue wheel. iterCap 24: see the loop in de().
         march: { steps: 192, bound: 0.0, far: 60.0, fog: 0.05, trapScale: 4.0, iterCap: 24 },
+        deJS: mandelboxDE,
         glsl3d: {
+            uniforms: `uniform float uScale;      // the Mandelbox scale (state.scale)
+uniform int uIterCap;      // the most folds of the Mandelbox estimator (march.iterCap)`,
+            defines: `#define MIN_R2 0.25
+#define FIXED_R2 1.0`,
             //MIN_R2 / FIXED_R2 / ITER_CAP are #defined by the shader template.
             de: `
 float de(vec3 pos, out float trap) {
@@ -501,11 +512,113 @@ float de(vec3 pos, out float trap) {
 `,
         },
     },
+    //PSEUDO-KLEINIAN (Knighty's fractal, as in Fragmentarium): endless organic caves, canyons and
+    //landscape-like structures, the "giant landscape" to fly through. Like the Mandelbox it is built
+    //from FOLDS, and each step does two things to the point p:
+    //  1. BOX FOLD:         p -> 2*clamp(p, -size, size) - p. Each coordinate beyond the box is
+    //                       mirrored back into it, so the space is folded like paper and the shape
+    //                       inside the box repeats outside it. The box is CSize = (0.92, 0.91, 0.92)
+    //                       times the Box size slider (state.kleinSize).
+    //  2. SPHERE INVERSION: a point INSIDE the unit sphere is moved to p / |p|^2 (the same direction,
+    //                       the distance 1/r), which turns the inside of the ball inside out; outside
+    //                       the sphere nothing happens. The folds and inversions bend the flat mirrored
+    //                       planes into the round caves and arches.
+    //  Then the 3D constant (c.re, c.im, cz) is added (0 = the classic shape, other values warp it).
+    //THE FINAL DISTANCE. The surface is not "where the orbit stays bounded" like the bulbs: after the
+    //folds, the fractal is a THICKENED PLANE. A point p ends up near a surface when it is near the
+    //infinite cylinder around the z axis (rxy = length(p.xy) close to 0.92784 = the thickness) or near
+    //the z = 0 plane (abs(rxy*p.z)/|p| is the distance to a cone-like shape around it). Taking the max of
+    //the two gives the thick slab, and dividing by DEfactor (how much the inversions stretched space,
+    //tracked in the loop) turns that distance in folded space back into a distance in real space.
+    //HEADLIGHT. The caves are dark places and the fixed sun would leave most walls black, so the light
+    //is mostly moved to the camera (march.headlight 0.6): the walls you look at are lit, like a lamp
+    //on a helmet.
+    kleinian: {
+        name: "Kleinian",
+        render: "raymarch",
+        needsWebGL: true,
+        camera: "fly",
+        formula: (s) => ({title: "Kleinian", eq: "p → k·fold(p) + c", vars: `fold = box fold · k = sphere inversion · box size = ${s.kleinSize.toFixed(3)}`}),
+        //kleinSize: the Box size slider. A change of 0.01 gives a quite different landscape (the folds
+        //are very sensitive to the box), which is the fun of it; 0.8..1.15 is the useful range.
+        //camFly: a start INSIDE a cavity, looking along an open direction. milestone19_check.py (a Python
+        //port of the shader) found it: DE = 0.533 there (the nearest wall is 0.53 away), and 99% of a
+        //32 x 24 grid of rays hit a wall within the far distance (a cave with walls to see, not empty
+        //space). speed 0.5: the caves are tight, so the start speed is half the Mandelbox's.
+        defaults: { c: { re: 0, im: 0 }, cz: 0, kleinSize: 1.0, camFly: { pos: [1.07, -1.6, -1.14], yaw: 0, pitch: -0.1, speed: 0.5 } },
+        //steps 192 and bound 0 like the Mandelbox (the camera is inside the shape). far 30: a ray
+        //that goes farther has missed. fog 0.09: stronger than the Mandelbox's, distant walls fade into
+        //the dark so a cave has depth. trapScale 12: the orbit trap (the smallest |p|^2 after a fold)
+        //is about 0.02..0.35 on visible walls, so this spreads it over a good part of the hue wheel.
+        //iterCap 14: the Python port shows 12 still overshoots the surface on 1.3% of test rays, 14 on none.
+        //headlight 0.6: see above.
+        march: { steps: 192, bound: 0.0, far: 30.0, fog: 0.09, trapScale: 12.0, iterCap: 14, headlight: 0.6 },
+        deJS: kleinianDE,
+        glsl3d: {
+            uniforms: `uniform float uKleinSize;   // the Box size slider (state.kleinSize)
+uniform int uIterCap;      // the most iterations of the Kleinian estimator (march.iterCap)`,
+            //the box (before the Box size multiplier) and the thickness of the slab, see above
+            defines: `#define KLEIN_CSIZE vec3(0.92436, 0.90756, 0.92436)
+#define KLEIN_THICKNESS 0.92784`,
+            de: `
+float de(vec3 p, out float trap) {
+    vec3 CSize = KLEIN_CSIZE * uKleinSize;   // half the size of the folding box, per axis
+    float DEfactor = 1.0;                    // how much the inversions have stretched space so far
+    trap = 1.0e10;
+    // ITER_CAP is a constant (GLSL ES 1.00 needs constant loop bounds); the slider and march.iterCap lower it.
+    for (int i = 0; i < ITER_CAP; i++) {
+        if (i >= uMaxIter || i >= uIterCap) break;
+        // 1. box fold: mirror every coordinate back into -CSize..CSize
+        p = 2.0 * clamp(p, -CSize, CSize) - p;
+        // 2. sphere inversion, only inside the unit sphere: p / r^2 is the same direction at the
+        // distance 1 / r. k = 1 outside it (nothing happens). r2 is kept off 0 so 1 / r2 stays finite.
+        float r2 = max(dot(p, p), 1.0e-12);
+        trap = min(trap, r2);
+        float k = max(1.0 / r2, 1.0);
+        p *= k;
+        DEfactor *= k;   // the inversion stretches space by k, so distances shrink by k
+        // 3. the offset (mouse / c z): 0 gives the classic shape
+        p += uC3;
+    }
+    // The final distance: a thickened plane (see the Kleinian entry in fractals.js). The max of
+    // "outside the cylinder of radius KLEIN_THICKNESS around the z axis" and "away from the cone
+    // around z = 0", divided by DEfactor to get back to real space. length(p) is kept off 0.
+    float rxy = length(p.xy);
+    return max(rxy - KLEIN_THICKNESS, abs(rxy * p.z) / max(length(p), 1.0e-12)) / DEfactor;
+}
+`,
+        },
+    },
 };
 
+//The Kleinian distance estimator in JavaScript doubles: the SAME maths as the GLSL de() above (keep
+//them in sync). state needs kleinSize, c, cz and maxIter.
+const KLEIN_CSIZE = [0.92436, 0.90756, 0.92436];
+const KLEIN_THICKNESS = 0.92784;
+export function kleinianDE(x, y, z, state) {
+    const sx = KLEIN_CSIZE[0] * state.kleinSize, sy = KLEIN_CSIZE[1] * state.kleinSize, sz = KLEIN_CSIZE[2] * state.kleinSize;
+    const cx = state.c.re, cy = state.c.im, cz = state.cz;
+    const iters = Math.min(FRACTALS.kleinian.march.iterCap, state.maxIter); //the same cap as the shader's uIterCap
+    let factor = 1.0;
+    for (let i = 0; i < iters; i++) {
+        //box fold: 2 * clamp(p, -size, size) - p
+        x = 2 * Math.max(-sx, Math.min(sx, x)) - x;
+        y = 2 * Math.max(-sy, Math.min(sy, y)) - y;
+        z = 2 * Math.max(-sz, Math.min(sz, z)) - z;
+        //sphere inversion inside the unit sphere
+        const r2 = Math.max(x*x + y*y + z*z, 1e-12);
+        const k = Math.max(1 / r2, 1);
+        x *= k; y *= k; z *= k; factor *= k;
+        x += cx; y += cy; z += cz;
+    }
+    const rxy = Math.hypot(x, y);
+    return Math.max(rxy - KLEIN_THICKNESS, Math.abs(rxy * z) / Math.max(Math.sqrt(x*x + y*y + z*z), 1e-12)) / factor;
+}
+
 //The Mandelbox distance estimator in JavaScript doubles: the SAME maths as the GLSL de() above
-//(keep them in sync). The fly camera calls it to know how far the nearest surface is, for its
-//adaptive speed and collision (inputs.js). state needs scale, c, cz and maxIter.
+//(keep them in sync). It is the Mandelbox's deJS: the fly camera calls it (through the registry) to
+//know how far the nearest surface is, for its adaptive speed and collision (inputs.js). state needs
+//scale, c, cz and maxIter.
 const MIN_R2 = 0.25;
 const FIXED_R2 = 1.0;
 export function mandelboxDE(x, y, z, state) {
