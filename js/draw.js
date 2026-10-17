@@ -4,6 +4,8 @@ export function draw(canvas, state){
     const ctx = canvas.getContext("2d");
     const img = ctx.createImageData(canvas.width, canvas.height);
     const data = img.data;
+    //read the iteration count once per draw instead of once per pixel
+    const maxIter = state.maxIter;
 
     for(let px = 0; px < canvas.width; px++){
         for(let py = 0; py < canvas.height; py++){
@@ -11,20 +13,10 @@ export function draw(canvas, state){
             let zx = (px + state.offsetX) / state.zoom;
             let zy = (py + state.offsetY) / state.zoom;
 
-            let localMaxIter;
-            if (state.simple) {
-                localMaxIter = 70;
-            } 
-            else if (state.bw) {
-                localMaxIter = 90;
-            } 
-            else {
-                localMaxIter = 60;
-            }
-            let iter = julia(zx, zy, state.c, localMaxIter);
+            let iter = julia(zx, zy, state.c, maxIter);
 
             if(state.simple){
-                let color = iter === localMaxIter ? 0 : 255 - Math.floor(iter * 255 / localMaxIter);
+                let color = iter === maxIter ? 0 : 255 - Math.floor(iter * 255 / maxIter);
 
                 let i = (py * canvas.width + px) * 4;
                 data[i] = color; //R
@@ -35,7 +27,7 @@ export function draw(canvas, state){
             //BLACK AND WHITE MODE
             else if(state.bw){
                 let shade;
-                if (iter === localMaxIter) {
+                if (iter === maxIter) {
                     shade = state.hueBase; // Center shade
                 } 
                 else {
@@ -53,10 +45,11 @@ export function draw(canvas, state){
             //COLOR MODE
             else{
                 let hue;
-                if(iter === localMaxIter) hue = state.hueBase; //Center hue
+                if(iter === maxIter) hue = state.hueBase; //Center hue
                 else hue = (state.hueBase + iter * state.hueSpeed) % 360;
 
-                let rgb = hslToRgb(hue, 70, 50);
+                //saturation/lightness come from the sliders (defaults 70/50 match the old hardcoded look)
+                let rgb = hslToRgb(hue, state.saturation, state.lightness);
 
                 let i = (py * canvas.width + px) * 4;
                 data[i] = rgb[0]; //R

@@ -13,6 +13,12 @@ const state = {
   //color variables
   hueBase: 0,
   hueSpeed: 10,
+  saturation: 70, //HSL saturation % (color mode only)
+  lightness: 50, //HSL lightness % (color mode only)
+
+  //fractal depth: max iterations per pixel, shared by every mode
+  //(higher = more detail but slower to draw)
+  maxIter: 60,
 
   //declare (0,0) for the fractal's canvas
   offsetX: -canvas.width / 2,
