@@ -25,6 +25,9 @@ const state = {
   offsetY: -canvas.height / 2,
   c: { re: -0.7, im: 0.27015 }, //const for fractal calculations
 
+  //key into FRACTALS in fractals.js; selectable in a later milestone
+  fractal: "julia",
+
   //modes
   bw: false,
   simple: false,
