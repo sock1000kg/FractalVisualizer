@@ -254,7 +254,11 @@ body {
     max-width: 260px;
     box-shadow: 0 0 10px #00000055;
     font-size: 1em;
-    align-items: center
+    align-items: center;
+    /* The panel can be taller than a short window: stop it 10px above the bottom edge (it sits
+       10px below the top) and let it scroll. The scrollbar look is set further down. */
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
 }
 
 #advanced summary {
@@ -263,6 +267,18 @@ body {
     font-size: 1em;
     margin-bottom: 10px;
     color: white;
+    /* Stay at the top of the panel while the content scrolls, so it can always be collapsed.
+       Needs a solid background, or the scrolling controls would show through. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: rgb(23, 23, 27);
+}
+
+/* the small hint under the Reset camera button */
+#advanced #camMoveHint {
+    color: #bbb;
+    font-size: 0.85em;
 }
 
 #advanced .inputs {
@@ -298,7 +314,7 @@ input[type="text"] { /* the zoom field is text so it can show 3.2×10⁹ */
     color: white;
 }
 
-/* === SCROLLBAR for ADVANCED (just in case) === */
+/* === SCROLLBAR for ADVANCED (it scrolls when the window is short) === */
 #advanced::-webkit-scrollbar {
     width: 6px;
 }
