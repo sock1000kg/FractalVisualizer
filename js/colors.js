@@ -1,6 +1,8 @@
 // Pure colouring: turns an iteration count into an [r, g, b] colour.
 // No DOM or canvas access on purpose, so it stays easy to test and to
 // mirror later in a WebGL shader.
+// Keep in sync with the colour code in glRenderer.js (the GLSL port of this file
+// and hslToRgb in utilities.js).
 import {hslToRgb} from './utilities.js';
 
 //SIMPLE MODE: plain greyscale, points inside the set are black

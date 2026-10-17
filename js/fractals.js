@@ -10,6 +10,11 @@
 //     c      -> starting value of state.c (the mouse-controlled parameter)
 //     center -> complex point shown in the middle of the screen
 //     zoom   -> pixels per unit of the complex plane
+//   glsl:    the same fractal written as two GLSL snippets for the WebGL renderer
+//     init -> sets the starting z and the constant k, from p (the pixel as a
+//             complex number) and uC (state.c)
+//     step -> one iteration, updating z
+//     Keep these in sync with the iterate function above.
 
 //Returns number of iterations for a point to escape
 //z = zx + i*zy
@@ -65,6 +70,11 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter) => julia(zx, zy, state.c, maxIter),
         //Julia: c is the constant, the pixel is the starting point
         defaults: { c: { re: -0.7, im: 0.27015 }, center: { re: 0, im: 0 }, zoom: 300 },
+        //z -> z^2 + c, starting at the pixel
+        glsl: {
+            init: "z = p; k = uC;",
+            step: "z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + k;",
+        },
     },
     mandelbrot: {
         name: "Mandelbrot",
@@ -72,12 +82,22 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter) => mandelbrot(zx, zy, state.c, maxIter),
         //the set spans about re -2..0.5, so centre on -0.5
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.5, im: 0 }, zoom: 300 },
+        //z -> z^2 + p, starting at the mouse-controlled uC
+        glsl: {
+            init: "z = uC; k = p;",
+            step: "z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + k;",
+        },
     },
     burningShip: {
         name: "Burning Ship",
         iterate: (zx, zy, state, maxIter) => burningShip(zx, zy, state.c, maxIter),
         //screen y points down, which shows the ship upright; centred on the main hull
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.4, im: -0.5 }, zoom: 250 },
+        //same as Mandelbrot, with abs() in the cross term
+        glsl: {
+            init: "z = uC; k = p;",
+            step: "z = vec2(z.x*z.x - z.y*z.y, 2.0*abs(z.x*z.y)) + k;",
+        },
     },
 };
 
