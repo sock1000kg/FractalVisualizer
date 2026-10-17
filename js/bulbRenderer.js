@@ -1,4 +1,8 @@
-// 3D MANDELBULB + JULIABULB renderer: a fragment shader that RAYMARCHES a 3D fractal.
+// 3D RAYMARCH renderer (Mandelbulb, Juliabulb, Mandelbox): a fragment shader that RAYMARCHES a 3D fractal.
+//
+// (The file keeps its old name, but it renders every raymarched type. The bulbs are described first;
+// the Mandelbox only differs in its distance estimator and a few constants, see MARCH_DEFAULTS and
+// the Mandelbox entry in fractals.js.)
 //
 // The 2D renderer asks one question per pixel: "does this point of the plane escape?". A 3D
 // fractal has no flat picture to ask that of. Instead we do what a camera does: for every pixel
@@ -38,37 +42,39 @@
 // glRenderer.js, so the hue, saturation, lightness, B&W and Simple settings all still work.
 //
 // WebGL 1 / GLSL ES 1.00, like the other shaders: loops need constant bounds.
-import {getFractal} from './fractals.js';
+import {getFractal, isFly} from './fractals.js';
 import {COLOUR_UNIFORM_DECLS, COMMON_FUNCS, COLOR_FROM_T, COLOUR_UNIFORMS, setColourUniforms,
         compile, link, VERTEX_SRC} from './glRenderer.js';
-import {bulbBasis, clampCam, BULB_LIMITS} from './mat4.js';
+import {bulbBasis, flyBasis, clampCam, BULB_LIMITS} from './mat4.js';
 
 //camera lens: vertical field of view, in radians (the same lens as the terrain)
 export const FOV_Y = 0.8;
 
-//Builds the FRAGMENT shader for one bulb type. glsl3d is its {init, drPlus} from the registry.
-export function bulbFragmentSource(glsl3d) {
-    return `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-` + COLOUR_UNIFORM_DECLS + `
-uniform vec3 uC3;          // the 3D constant (c.re, c.im, cz)
-uniform vec3 uCamPos;      // where the eye is
-uniform vec3 uForward;     // the camera's axes (see bulbBasis in mat4.js)
-uniform vec3 uRight;
-uniform vec3 uUp;
-uniform float uTanHalfFov; // tan(fieldOfView / 2): how wide the lens sees
-` + COMMON_FUNCS + COLOR_FROM_T + `
-// The bulb is contained in a sphere of this radius around the origin, which we use below to
-// skip rays that miss it entirely.
-#define BOUND_RADIUS 1.5
+//THE PER-TYPE CONSTANTS of the raymarcher. A registry entry can override any of them with
+//march: {...}; the defaults below are the bulbs' values, so they render as they always did.
+//  steps      the most steps one ray may take. It is baked into the shader as a constant (GLSL ES 1.00
+//             loops need constant bounds), which is fine because every type gets its own shader.
+//  bound      radius of a sphere around the origin that contains the shape; rays that miss it are
+//             skipped. 0 = no bounding sphere, the march starts at the eye. The Mandelbox uses that:
+//             the camera is often INSIDE it, and its size depends on the scale slider.
+//  far        a ray that has travelled farther than this has missed
+//  fog        density of the distance fog (0 = none, the bulbs). The colour is mixed towards the
+//             background by 1 - exp(-fog * t) with t the distance travelled: 0 at the eye, towards 1
+//             far away. It makes far walls fade out, which is what gives a big space its depth.
+//  trapScale  the orbit trap is multiplied by this to become the "t" of colorFromT (hue = t * hue speed)
+//  iterCap    the most iterations of the distance estimator (the bulbs: 64, see de() below)
+export const MARCH_DEFAULTS = { steps: 128, bound: 1.5, far: 10.0, fog: 0.0, trapScale: 10.0, iterCap: 64 };
 
-// DISTANCE ESTIMATOR of the bulb at the point pos. Returns the estimated distance to the
-// surface (negative inside) and the orbit trap through the out parameter.
-float de(vec3 pos, out float trap) {
+//a number as a GLSL float literal ("10" would be an int there, and GLSL ES 1.00 never converts)
+const glslFloat = (n) => Number.isInteger(n) ? n.toFixed(1) : String(n);
+
+//Builds the FRAGMENT shader for one raymarched type. glsl3d is its entry from the registry:
+//either {init, drPlus} (a bulb: the shared estimator below is built from the snippets) or {de}
+//(a full GLSL function used as it is). march is its constants (see MARCH_DEFAULTS; missing
+//fields take the defaults).
+export function bulbFragmentSource(glsl3d, march = {}) {
+    const m = { ...MARCH_DEFAULTS, ...march };
+    const estimator = glsl3d.de ?? `float de(vec3 pos, out float trap) {
     ${glsl3d.init}   // v = the orbit's current vector, k = the vector added every step
     float dr = 1.0;  // |d v / d pos|: how fast the orbit moves when pos moves
     float r = length(v);
@@ -79,7 +85,7 @@ float de(vec3 pos, out float trap) {
     // escaped after 64 steps is so close to the set that the estimate is already below any
     // pixel, so more iterations just make a slightly better guess at a great cost. The user's
     // iteration slider can lower it further.
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < ITER_CAP; i++) {
         if (i >= uMaxIter) break;
         if (r > 2.0) break; // escaped: the bailout radius
         if (r > 0.0) {
@@ -105,7 +111,37 @@ float de(vec3 pos, out float trap) {
     // r is kept off 0 so log() never sees it; dr off 0 so we never divide by it
     float rr = max(r, 1.0e-6);
     return 0.5 * log(rr) * rr / max(dr, 1.0e-6);
-}
+}`;
+    return `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+` + COLOUR_UNIFORM_DECLS + `
+uniform vec3 uC3;          // the 3D constant (c.re, c.im, cz)${glsl3d.de ? `
+uniform float uScale;      // the Mandelbox scale (state.scale)
+uniform int uIterCap;      // the most folds of the Mandelbox estimator (march.iterCap)` : ""}
+uniform vec3 uCamPos;      // where the eye is
+uniform vec3 uForward;     // the camera's axes (see bulbBasis in mat4.js)
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform float uTanHalfFov; // tan(fieldOfView / 2): how wide the lens sees
+` + COMMON_FUNCS + COLOR_FROM_T + `
+// The bulb is contained in a sphere of this radius around the origin, which we use below to
+// skip rays that miss it entirely. 0 = no such sphere (see MARCH_DEFAULTS).
+#define BOUND_RADIUS ${glslFloat(m.bound)}
+#define STEPS ${m.steps}
+#define ITER_CAP ${m.iterCap}
+#define FAR ${glslFloat(m.far)}
+#define FOG ${glslFloat(m.fog)}
+#define TRAP_SCALE ${glslFloat(m.trapScale)}${glsl3d.de ? `
+#define MIN_R2 0.25
+#define FIXED_R2 1.0` : ""}
+
+// DISTANCE ESTIMATOR of the bulb at the point pos. Returns the estimated distance to the
+// surface (negative inside) and the orbit trap through the out parameter.
+${estimator}
 
 // The surface NORMAL (the direction it faces, needed for lighting) by FINITE DIFFERENCES: the
 // DE is a smooth "height above the surface", so the surface normal is the direction in which it
@@ -145,19 +181,24 @@ void main() {
     // (b = dot(ro, rd), c = |ro|^2 - R^2, solutions t = -b -/+ sqrt(b^2 - c)). No real
     // solution (h < 0) = the ray misses; tFar < 0 = the sphere is behind us. When the eye is
     // inside the sphere the entry point is behind us, so the march starts at 0 instead.
-    float b = dot(ro, rd);
-    float h = b * b - (dot(ro, ro) - BOUND_RADIUS * BOUND_RADIUS);
-    if (h < 0.0) {
-        gl_FragColor = vec4(bg, 1.0);
-        return;
+    // BOUND_RADIUS 0 skips all of this (the Mandelbox): the march starts at the eye and runs to FAR.
+    float t = 0.0;
+    float tMax = FAR; // past FAR we call it a miss
+    if (BOUND_RADIUS > 0.0) {
+        float b = dot(ro, rd);
+        float h = b * b - (dot(ro, ro) - BOUND_RADIUS * BOUND_RADIUS);
+        if (h < 0.0) {
+            gl_FragColor = vec4(bg, 1.0);
+            return;
+        }
+        float tFar = -b + sqrt(h);
+        if (tFar < 0.0) {
+            gl_FragColor = vec4(bg, 1.0);
+            return;
+        }
+        t = max(-b - sqrt(h), 0.0);
+        tMax = min(tFar, FAR);
     }
-    float tFar = -b + sqrt(h);
-    if (tFar < 0.0) {
-        gl_FragColor = vec4(bg, 1.0);
-        return;
-    }
-    float t = max(-b - sqrt(h), 0.0);
-    float tMax = min(tFar, 10.0); // past 10 we call it a miss
 
     // THE RAYMARCH (sphere tracing) LOOP. Ask the DE how far the surface is at the current spot
     // and jump that far along the ray: by the DE's guarantee nothing is closer, so no surface can
@@ -166,15 +207,15 @@ void main() {
     // eps * t is looser far away (where one pixel covers more) and tighter close up.
     //   pixelAngle = 2 * uTanHalfFov / height  is the angle one pixel spans (radians)
     //   eps = 0.5 * pixelAngle                 half a pixel, so the edge is not visibly fuzzy
-    // The loop stops after 128 steps (a constant bound). Rays that graze the surface need many
+    // The loop stops after STEPS steps (a constant bound, 128 for the bulbs). Rays that graze the surface need many
     // small steps; one that runs out of steps while still inside the sphere is close to the
     // surface, so it counts as a hit (this also darkens such edges through the AO below).
     float pixelAngle = 2.0 * uTanHalfFov / uResolution.y;
     float eps = 0.5 * pixelAngle;
     bool escaped = false;
-    float steps = 128.0;
+    float steps = float(STEPS);
     float trap = 0.0;
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < STEPS; i++) {
         float d = de(ro + rd * t, trap);
         if (d < eps * t) {
             steps = float(i);
@@ -190,7 +231,7 @@ void main() {
         gl_FragColor = vec4(bg, 1.0);
         return;
     }
-    // (running out of the 128 steps leaves steps == 128 and escaped == false: still a surface)
+    // (running out of the steps leaves steps == STEPS and escaped == false: still a surface)
 
     vec3 p = ro + rd * t;
     // the normal's sample distance: about a pixel's footprint, but never so small that float
@@ -204,27 +245,33 @@ void main() {
     float diffuse = 0.25 + 0.75 * max(dot(n, L), 0.0);
     // AMBIENT OCCLUSION from the step count: a ray that needed many steps passed close to the
     // surface for a long time, which happens in crevices and along edges where the shape
-    // shadows itself. So more steps = darker, up to -80% at 128 steps. It costs nothing extra.
-    float ao = 1.0 - steps / 128.0 * 0.8;
+    // shadows itself. So more steps = darker, up to -80% at STEPS steps. It costs nothing extra.
+    float ao = 1.0 - steps / float(STEPS) * 0.8;
     // a small highlight: the light's mirror image in the surface, seen when the eye is near it
     float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), 32.0) * 0.3;
 
-    // colour: the orbit trap (0..about 2) scaled by 10 plays the part of the smooth iteration
-    // count in the 2D colouring (colorFromT gives 0..255)
-    vec3 base = colorFromT(trap * 10.0, false) / 255.0;
+    // colour: the orbit trap (0..about 2 for the bulbs) scaled by TRAP_SCALE (10) plays the part of the
+    // smooth iteration count in the 2D colouring (colorFromT gives 0..255)
+    vec3 base = colorFromT(trap * TRAP_SCALE, false) / 255.0;
     vec3 col = base * diffuse * ao + vec3(spec) * ao;
+    // FOG: the farther the hit, the more of the background colour is mixed in. exp(-FOG * t) is
+    // the fraction of the surface colour that survives the trip (1 at the eye, then falling off
+    // smoothly), so mixing by 1 - exp(-FOG * t) fades distant walls out. FOG 0 (the bulbs) is no
+    // fog at all, and the picture is unchanged.
+    if (FOG > 0.0) col = mix(col, bg, 1.0 - exp(-FOG * t));
     gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 `;
 }
 
-//the uniforms of the bulb shaders that are not in the shared colour set (setColourUniforms
-//sets the colour ones: resolution, iterations, hue, ..., power)
-export const BULB_UNIFORMS = ["uC3", "uCamPos", "uForward", "uRight", "uUp", "uTanHalfFov"];
+//the uniforms of the raymarch shaders that are not in the shared colour set (setColourUniforms
+//sets the colour ones: resolution, iterations, hue, ..., power). uScale and uIterCap exist only
+//in the Mandelbox shader (on a bulb program their location is null and they are never set).
+export const BULB_UNIFORMS = ["uC3", "uCamPos", "uForward", "uRight", "uUp", "uTanHalfFov", "uScale", "uIterCap"];
 
-//Sets up the bulb renderer on a WebGL canvas and returns {draw}. draw(state) renders one frame
+//Sets up the raymarch renderer on a WebGL canvas and returns {draw}. draw(state) renders one frame
 //and THROWS if a shader cannot be built (main.js then goes back to Julia and shows a toast).
-//Programs are compiled lazily, once per bulb type, so a shader problem shows up only when the
+//Programs are compiled lazily, once per type, so a shader problem shows up only when the
 //type is used and never costs the 2D view.
 export function createBulbRenderer(canvas, gl) {
     const vertexShader = compile(gl, gl.VERTEX_SHADER, VERTEX_SRC);
@@ -242,7 +289,8 @@ export function createBulbRenderer(canvas, gl) {
 
     function getProgram(key) {
         if (cache[key]) return cache[key];
-        const fragmentShader = compile(gl, gl.FRAGMENT_SHADER, bulbFragmentSource(getFractal(key).glsl3d));
+        const f = getFractal(key);
+        const fragmentShader = compile(gl, gl.FRAGMENT_SHADER, bulbFragmentSource(f.glsl3d, f.march));
         const program = link(gl, vertexShader, fragmentShader);
         const uniforms = {};
         for (const name of [...COLOUR_UNIFORMS, ...BULB_UNIFORMS]) {
@@ -261,9 +309,16 @@ export function createBulbRenderer(canvas, gl) {
         gl.enableVertexAttribArray(p.aPos);
         gl.vertexAttribPointer(p.aPos, 2, gl.FLOAT, false, 0, 0);
 
-        //the camera: orbit angles -> eye position and axes
-        clampCam(state.camBulb, BULB_LIMITS);
-        const {eye, forward, right, up} = bulbBasis(state.camBulb);
+        //the camera: the fly camera (Mandelbox) or the orbit angles (bulbs) -> eye position and axes
+        const fly = isFly(state.fractal);
+        let basis;
+        if (fly) {
+            basis = flyBasis(state.camFly);
+        } else {
+            clampCam(state.camBulb, BULB_LIMITS);
+            basis = bulbBasis(state.camBulb);
+        }
+        const {eye, forward, right, up} = basis;
         const u = p.uniforms;
         setColourUniforms(gl, canvas, u, state);
         gl.uniform3f(u.uC3, state.c.re, state.c.im, state.cz);
@@ -272,6 +327,10 @@ export function createBulbRenderer(canvas, gl) {
         gl.uniform3f(u.uRight, right[0], right[1], right[2]);
         gl.uniform3f(u.uUp, up[0], up[1], up[2]);
         gl.uniform1f(u.uTanHalfFov, Math.tan(FOV_Y / 2));
+        if (fly) {
+            gl.uniform1f(u.uScale, state.scale);
+            gl.uniform1i(u.uIterCap, { ...MARCH_DEFAULTS, ...getFractal(state.fractal).march }.iterCap);
+        }
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
         gl.disableVertexAttribArray(p.aPos);

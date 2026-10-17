@@ -186,3 +186,35 @@ export function moveTarget(cam, dxPixels, dyPixels, viewportHeight, limits = TER
     });
     cam.target = moved; //a new array, so a target shared with a default/preset object is never mutated
 }
+
+//THE FLY CAMERA (first person, used by the Mandelbox). Unlike the orbit camera, which circles a
+//target, this one STANDS at cam.pos and turns on the spot. Its state is
+//    { pos: [x, y, z], yaw, pitch, speed }
+//and the axes come from the two angles:
+//  forward  where it looks:  (cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw))
+//           yaw turns around the vertical y axis (yaw = 0 looks along +z, yaw = pi along -z),
+//           pitch tilts up (+) / down (-). The cos(pitch) factor keeps the vector at length 1.
+//  right    the camera's right  = forward x worldUp (the same cross product bulbBasis uses).
+//           It is level with the ground, which is why the camera never rolls sideways.
+//  up       the camera's true up = right x forward (perpendicular to both).
+//Pitch is clamped to +-FLY_PITCH_MAX (a bit under pi/2 = 1.5708): looking straight up or down
+//would make forward parallel to worldUp, and right = forward x worldUp would be the zero vector.
+//It returns the same shape as bulbBasis ({eye, forward, right, up}), so the renderer does not
+//care which kind of camera it is given.
+export const FLY_PITCH_MAX = 1.5;
+
+export function flyForward(cam) {
+    return [
+        Math.cos(cam.pitch) * Math.sin(cam.yaw),
+        Math.sin(cam.pitch),
+        Math.cos(cam.pitch) * Math.cos(cam.yaw),
+    ];
+}
+
+export function flyBasis(cam) {
+    cam.pitch = Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, cam.pitch));
+    const forward = flyForward(cam);
+    const right = normalize(cross(forward, [0, 1, 0]));
+    const up = cross(right, forward);
+    return {eye: [...cam.pos], forward, right, up};
+}
