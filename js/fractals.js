@@ -14,9 +14,15 @@
 //     c      -> starting value of state.c (the mouse-controlled parameter)
 //     center -> complex point shown in the middle of the screen
 //     zoom   -> pixels per unit of the complex plane
-//   juliaOf: (optional) key of the Julia-style type that belongs to this one. Types with
-//            this field get the Julia preview inset and click-to-jump (see the
-//            MANDELBROT <-> JULIA comment below). Types added later can opt in with it.
+//   kind:    the ROLE of the pixel (see the MANDELBROT <-> JULIA comment below)
+//            "mandelbrot" -> the pixel is the constant p, and state.c is the start z0
+//            "julia"      -> the pixel is the start z0, and state.c is the constant c
+//   partner: (optional) key of the linked type of the opposite kind. Types with this field
+//            get the preview inset (the partner, drawn small) and click-to-jump in both
+//            directions. Both entries of a pair must name each other. Types added later
+//            can opt in with it.
+//   formula: (state) => text of the equation with the live values filled in. Pass a
+//            different state (e.g. the inset's) to get that view's equation.
 //   glsl:    the same fractal written as two GLSL snippets for the WebGL renderer
 //     init -> sets the starting z and the constant k, from p (the pixel as a
 //             complex number) and uC (state.c)
@@ -87,11 +93,37 @@
 //Burning Ship works the same way with abs() applied before the power: its counterpart
 //is the "Burning Ship Julia" type below (fixed constant, pixel is the start).
 //
+//That is what `kind` means in the registry: on a "mandelbrot" kind the pixel is the
+//constant p (and state.c is the start z0); on a "julia" kind the pixel is the start z0
+//(and state.c is the constant c). `partner` links the two sides, so the inset can show
+//the other side of the pair and a click can jump across.
+//
 //Note: in this app state.c on a Mandelbrot type is the starting value z0, not 0. The
 //correspondence above is exact when z0 = 0; with another z0 the Mandelbrot picture is a
 //morphed version, but p is still the constant that selects the Julia set.
 const EXTRA = 3;
 const SAFE_LOG2 = 60;
+
+//EQUATION TEXT
+//Small helpers that turn numbers into text for the on-screen formula lines.
+
+//The power as text: whole numbers 2..8 become a superscript (z² + c); anything else
+//(like 2.5) is written with a caret and one decimal place (z^2.5 + c).
+const SUPERSCRIPTS = {2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸"};
+export function formatPower(n) {
+    return SUPERSCRIPTS[n] ?? "^" + n.toFixed(1);
+}
+
+//A complex number as text with 3 decimal places and a real minus sign: "−0.700 + 0.270i".
+//A value that rounds to zero is shown as 0.000 (never "−0.000").
+export function formatComplex({re, im}) {
+    const a = re.toFixed(3);
+    const b = Math.abs(im).toFixed(3);
+    const real = Number(a) === 0 ? "0.000" : a.replace("-", "−");
+    //the sign of the imaginary part decides between "+" and "−" (rounded zero counts as +)
+    const minus = im < 0 && Number(b) !== 0;
+    return `${real} ${minus ? "−" : "+"} ${b}i`;
+}
 
 //z^n for a real n, with z = x + i*y. The result goes into the module-level scratch
 //variables PX / PY instead of a returned object, so the hot loop allocates nothing.
@@ -247,6 +279,9 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => julia(zx, zy, state.c, state.power, maxIter, out),
         //Julia: c is the constant, the pixel is the starting point
         defaults: { c: { re: -0.7, im: 0.27015 }, center: { re: 0, im: 0 }, zoom: 300 },
+        kind: "julia",
+        partner: "mandelbrot",
+        formula: (s) => `Julia: z → z${formatPower(s.power)} + c   (z₀ = pixel, c = ${formatComplex(s.c)})`,
         //z -> z^n + c, starting at the pixel
         glsl: {
             init: "z = p; k = uC;",
@@ -259,7 +294,9 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => mandelbrot(zx, zy, state.c, state.power, maxIter, out),
         //the set spans about re -2..0.5, so centre on -0.5
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.5, im: 0 }, zoom: 300 },
-        juliaOf: "julia", //hover preview and click-to-jump use the Julia type
+        kind: "mandelbrot",
+        partner: "julia", //the inset and click-to-jump use the Julia type
+        formula: (s) => `Mandelbrot: z → z${formatPower(s.power)} + p   (p = pixel, z₀ = ${formatComplex(s.c)})`,
         //z -> z^n + p, starting at the mouse-controlled uC
         glsl: {
             init: "z = uC; k = p;",
@@ -271,7 +308,9 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => burningShip(zx, zy, state.c, state.power, maxIter, out),
         //screen y points down, which shows the ship upright; centred on the main hull
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.4, im: -0.5 }, zoom: 250 },
-        juliaOf: "burningShipJulia",
+        kind: "mandelbrot",
+        partner: "burningShipJulia",
+        formula: (s) => `Burning Ship: z → (|Re z| + i|Im z|)${formatPower(s.power)} + p   (p = pixel, z₀ = ${formatComplex(s.c)})`,
         //same as Mandelbrot, with abs() of both parts before the power
         glsl: {
             init: "z = uC; k = p;",
@@ -283,6 +322,9 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => burningShipJulia(zx, zy, state.c, state.power, maxIter, out),
         //c is a point inside the Burning Ship's main body, so the set is connected
         defaults: { c: { re: -0.5, im: -0.5 }, center: { re: 0, im: 0 }, zoom: 300 },
+        kind: "julia",
+        partner: "burningShip",
+        formula: (s) => `Burning Ship Julia: z → (|Re z| + i|Im z|)${formatPower(s.power)} + c   (z₀ = pixel, c = ${formatComplex(s.c)})`,
         //like Julia (constant uC, start at the pixel) with abs() before the power
         glsl: {
             init: "z = p; k = uC;",

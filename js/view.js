@@ -56,3 +56,13 @@ export function screenToComplex(state, sx, sy) {
         im: (sy + state.offsetY) / state.zoom,
     };
 }
+
+//the inverse of screenToComplex: the screen pixel where the complex number (re, im) is drawn.
+//From re = (sx + offsetX) / zoom we get sx = re * zoom - offsetX (and the same for y).
+//Used to place the crosshair markers on top of the canvases.
+export function complexToScreen(state, re, im) {
+    return {
+        x: re * state.zoom - state.offsetX,
+        y: im * state.zoom - state.offsetY,
+    };
+}
