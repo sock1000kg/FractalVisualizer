@@ -37,6 +37,17 @@
 //     init -> sets Z and K from P (the pixel) and C (state.c), both vec4 complex dd numbers
 //     step -> one iteration; uses cdAdd, cdPowInt(Z, uPowerInt) and cdAbs. Whole powers only.
 //     Keep these in sync with glsl above.
+//
+// 3D bulbs (Mandelbulb, Juliabulb) are a different kind of entry. They have no iterate, glsl or
+// glslDD, because they are not drawn per point of the complex plane but raymarched in 3D
+// (bulbRenderer.js). Their extra / different fields:
+//   render:   "raymarch" marks a bulb. Every other entry is a 2D type and leaves it out.
+//   needsWebGL: true -> the CPU renderer cannot draw it (the selector disables the option)
+//   glsl3d:   {init, drPlus}: the two GLSL snippets that tell the shared distance estimator
+//             which bulb this is (see MANDELBULB below for what they mean)
+//   defaults: c and cz (the 3D constant (c.re, c.im, cz)), power, and cam (yaw, pitch, dist of
+//             the orbit camera). There is no center / zoom: the "zoom" of a bulb is the
+//             camera distance. Bulbs have no kind or partner (no inset, no jump).
 
 //SMOOTH COLOURING
 //
@@ -132,6 +143,16 @@ export function formatComplex({re, im}) {
     //the sign of the imaginary part decides between "+" and "−" (rounded zero counts as +)
     const minus = im < 0 && Number(b) !== 0;
     return `${real} ${minus ? "−" : "+"} ${b}i`;
+}
+
+//A 3D vector as text: "(−0.200, 0.600, 0.200)". Same rules as formatComplex (3 decimals, a real
+//minus sign, a value that rounds to zero is shown as 0.000).
+export function formatVec3(x, y, z) {
+    const part = (v) => {
+        const a = v.toFixed(3);
+        return Number(a) === 0 ? "0.000" : a.replace("-", "−");
+    };
+    return `(${part(x)}, ${part(y)}, ${part(z)})`;
 }
 
 //z^n for a real n, with z = x + i*y. The result goes into the module-level scratch
@@ -356,7 +377,53 @@ export const FRACTALS = {
             step: "Z = cdAdd(cdPowInt(cdAbs(Z), uPowerInt), K);",
         },
     },
+    //3D BULBS. These two are raymarched (bulbRenderer.js), so they need no iterate / glsl.
+    //
+    //MANDELBULB: the 3D analogue of the Mandelbrot set. A point is a 3D vector v, and the step is
+    //    v -> v^n + p        (n = state.power, 8 for the classic bulb)
+    //where v^n is the "3D power" explained in bulbRenderer.js and p is the point of space being
+    //tested. v starts at the mouse-controlled constant (c.re, c.im, cz), which is (0, 0, 0) for
+    //the classic bulb, exactly like state.c is z0 on the 2D Mandelbrot.
+    //JULIABULB: its Julia counterpart. The step is the same,
+    //    v -> v^n + c3       with c3 = (c.re, c.im, cz)
+    //but v STARTS at the point of space being tested and c3 is fixed.
+    //
+    //glsl3d tells the shared distance estimator (de() in bulbRenderer.js) which one it is:
+    //  init   -> declares v (the current vector) and k (the vector added each step), from pos
+    //            (the point of space) and uC3 (the constant)
+    //  drPlus -> what is added to the running derivative dr every step: 1 for the Mandelbulb
+    //            (p moves with the point, so d(v0)/d(pos) = 0 and the step contributes +1),
+    //            0 for the Juliabulb (the constant does not depend on the point)
+    mandelbulb: {
+        name: "Mandelbulb",
+        render: "raymarch",
+        needsWebGL: true,
+        formula: (s) => ({title: "Mandelbulb", eq: `v → v${formatPower(s.power)} + p (power in spherical coords)`, vars: `p = 3D point · v₀ = ${formatVec3(s.c.re, s.c.im, s.cz)}`}),
+        defaults: { c: { re: 0, im: 0 }, cz: 0, power: 8, cam: { yaw: 0.6, pitch: 0.35, dist: 3.0 } },
+        glsl3d: {
+            init: "vec3 v = uC3; vec3 k = pos;",
+            drPlus: "1.0",
+        },
+    },
+    juliabulb: {
+        name: "Juliabulb",
+        render: "raymarch",
+        needsWebGL: true,
+        formula: (s) => ({title: "Juliabulb", eq: `v → v${formatPower(s.power)} + c`, vars: `v₀ = 3D point · c = ${formatVec3(s.c.re, s.c.im, s.cz)}`}),
+        //c = (-0.2, 0.6, 0.2): a distance-estimator check (Python port of the shader) shows a solid,
+        //bumpy surface that fills the default view, so the picture is not empty
+        defaults: { c: { re: -0.2, im: 0.6 }, cz: 0.2, power: 8, cam: { yaw: 0.6, pitch: 0.35, dist: 3.0 } },
+        glsl3d: {
+            init: "vec3 v = pos; vec3 k = uC3;",
+            drPlus: "0.0",
+        },
+    },
 };
+
+//true for the 3D bulb types (the ones rendered by raymarching, not per point of the plane)
+export function isRaymarch(key) {
+    return getFractal(key).render === "raymarch";
+}
 
 //Looks a fractal up by key. Unknown or missing keys fall back to Julia
 //so a bad state value can never break drawing.
