@@ -1,9 +1,9 @@
 # Trình tạo ảnh Fractal
 *(Tiếng Việt | [English](./README.md))*
 
-[Demo](https://sock1000kg.github.io/FractalVisualizer/)
+[Demo](https://fractal.sock1000kg.io.vn/)
 
-Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, được xây dựng bằng HTML5 và JavaScript dựa trên logic của tập Julia. Bạn có thể khám phá vô số hoa văn đầy mê hoặc, phóng to để thấy các chi tiết tinh xảo, và lưu lại những fractal yêu thích. Ngoài ra, bạn cũng có thể tuỳ chình màu sắc trong phần "Cài đặt nâng cao" để thoả mãn trí tưởng tượng của mình. Chúc bạn vui vẻ :)
+Fractal Visualizer là một công cụ tạo fractal chạy trên browser, được xây dựng bằng HTML5, JavaScript và WebGL. Bạn có thể khám phá vô số hoa văn đầy mê hoặc, phóng to để thấy các chi tiết tinh xảo, và lưu lại những fractal yêu thích. Ngoài ra, bạn cũng có thể tuỳ chình màu sắc trong phần "Cài đặt nâng cao" để thoả mãn trí tưởng tượng của mình. Chúc bạn vui vẻ :)
 
 ## Tính năng
 - Vẽ fractal theo vị trí chuột và sự thay đổi dải màu
@@ -32,11 +32,15 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 Trang web đề nghị trình duyệt dùng GPU mạnh, nhưng đây chỉ là gợi ý. Trên laptop có hai GPU chạy Windows, hãy tự đặt: Settings → Display → Graphics → thêm trình duyệt → Options → High performance, rồi khởi động lại trình duyệt. Mở `chrome://gpu` (hoặc xem dòng `GPU:` trong console) để kiểm tra GPU đang dùng.
 
 ## Hình ảnh
-<img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
 <img width="1229" height="691" alt="fractal" src="https://github.com/user-attachments/assets/026eace9-b995-48d4-9472-30d1eff6de41" />
-<img width="1920" height="1080" alt="Snow Chaos" src="https://github.com/user-attachments/assets/0005908d-0726-4d1a-ba04-2246f390eb75" />
-<img width="1222" height="591" alt="fractal (3)" src="https://github.com/user-attachments/assets/a097a270-3e62-477f-b95f-00eecbc2373a" />
-<img width="1222" height="591" alt="fractal (2)" src="https://github.com/user-attachments/assets/c870d404-6249-4a46-97b8-140778677db8" />
+<img width="1528" height="732" alt="iceland" src="https://github.com/user-attachments/assets/d0f7bf3b-47b1-498b-b1b6-e144f31a432e" />
+<img width="1912" height="948" alt="computer" src="https://github.com/user-attachments/assets/57bd24b6-0aab-416f-aa8e-834e4e924b03" />
+<img width="1528" height="732" alt="burst" src="https://github.com/user-attachments/assets/3d9fd705-2bea-4cf5-b40d-988f02b7dd2f" />
+<img width="1528" height="732" alt="streaks" src="https://github.com/user-attachments/assets/f1bc6d7a-f41f-4703-bf80-5669c11dfdce" />
+<img width="1912" height="948" alt="space" src="https://github.com/user-attachments/assets/7cb23e09-54f9-43ea-843e-ecf87bf0a901" />
+<img width="1528" height="732" alt="slope" src="https://github.com/user-attachments/assets/112accbf-e27d-46ae-97a4-647427ea4a2a" />
+<img width="1528" height="732" alt="moon" src="https://github.com/user-attachments/assets/914e2779-3c5a-457f-be19-5b38017d1eb0" />
+
 
 ## Ghi chú
 Mình lấy cảm hứng từ video "I coded one project EVERY WEEK for a YEAR" của Carter Semrad. Vì đặc biệt ấn tượng với dự án tạo fractal nên mình quyết định thử tự xây dựng một phiên bản của riêng mình và thêm vào một số tính năng.
