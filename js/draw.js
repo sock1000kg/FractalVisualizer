@@ -1,73 +1,41 @@
-import {julia, hslToRgb} from './utilities.js';
+import {getFractal} from './fractals.js';
+import {colorize} from './colors.js';
 
 export function draw(canvas, state){
     const ctx = canvas.getContext("2d");
     const img = ctx.createImageData(canvas.width, canvas.height);
     const data = img.data;
+    //read these once per draw instead of once per pixel
+    const maxIter = state.maxIter;
+    const fractal = getFractal(state.fractal);
+    //one reusable result object per draw, so no object is allocated per pixel
+    const out = {iter: 0, smooth: 0};
+    const halfW = canvas.width / 2;
+    const halfH = canvas.height / 2;
 
-    for(let px = 0; px < canvas.width; px++){
-        for(let py = 0; py < canvas.height; py++){
-            //zx, zy are the coordinates in the complex plane
-            let zx = (px + state.offsetX) / state.zoom;
-            let zy = (py + state.offsetY) / state.zoom;
+    //rows outside, columns inside: the image buffer is laid out row by row,
+    //so this writes memory sequentially, which is friendlier to the CPU cache.
+    //Each pixel is independent, so the result is identical to the old loop order.
+    for(let py = 0; py < canvas.height; py++){
+        for(let px = 0; px < canvas.width; px++){
+            //zx, zy are the coordinates in the complex plane (the mapping from view.js):
+            //the centre plus a small distance. A double keeps ~16 digits, so this stays
+            //accurate up to a zoom of about 1e13, where neighbouring pixels still differ.
+            let zx = state.center.re + (px - halfW) / state.zoom;
+            let zy = state.center.im + (py - halfH) / state.zoom;
 
-            let localMaxIter;
-            if (state.simple) {
-                localMaxIter = 70;
-            } 
-            else if (state.bw) {
-                localMaxIter = 90;
-            } 
-            else {
-                localMaxIter = 60;
-            }
-            let iter = julia(zx, zy, state.c, localMaxIter);
+            fractal.iterate(zx, zy, state, maxIter, out);
+            let [r, g, b] = colorize(out, maxIter, state);
 
-            if(state.simple){
-                let color = iter === localMaxIter ? 0 : 255 - Math.floor(iter * 255 / localMaxIter);
-
-                let i = (py * canvas.width + px) * 4;
-                data[i] = color; //R
-                data[i+1] = color; //G
-                data[i+2] = color; //B
-                data[i+3] = 255;
-            }
-            //BLACK AND WHITE MODE
-            else if(state.bw){
-                let shade;
-                if (iter === localMaxIter) {
-                    shade = state.hueBase; // Center shade
-                } 
-                else {
-                    shade = (state.hueBase + iter * state.hueSpeed) % 256;
-                }
-                let color = 255 - Math.floor(shade); 
-
-                let i = (py * canvas.width + px) * 4;
-                data[i] = color; //R
-                data[i+1] = color; //G
-                data[i+2] = color; //B
-                data[i+3] = 255;
-            }
-
-            //COLOR MODE
-            else{
-                let hue;
-                if(iter === localMaxIter) hue = state.hueBase; //Center hue
-                else hue = (state.hueBase + iter * state.hueSpeed) % 360;
-
-                let rgb = hslToRgb(hue, 70, 50);
-
-                let i = (py * canvas.width + px) * 4;
-                data[i] = rgb[0]; //R
-                data[i+1] = rgb[1]; //G
-                data[i+2] = rgb[2]; //B
-                data[i+3] = 255;
-            }
+            //single RGBA write for every mode
+            let i = (py * canvas.width + px) * 4;
+            data[i] = r;
+            data[i+1] = g;
+            data[i+2] = b;
+            data[i+3] = 255;
         }
     }
 
     ctx.putImageData(img, 0, 0);
     // console.log("drawn succesfully");
 }
-

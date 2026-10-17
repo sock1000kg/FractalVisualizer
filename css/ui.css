@@ -12,16 +12,38 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* === CONTROLS BAR (LEFT) === */
-#controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+/* === CANVAS === */
+/* touch-action: none tells the browser not to scroll or pinch-zoom the page when fingers
+   are on the fractal, so our own touch handlers (js/inputs.js) get every gesture. */
+#canvas {
+    touch-action: none;
+    display: block;
+}
 
+/* === TOP-LEFT COLUMN === */
+/* Holds the controls bar, the equation line and (on phones) the preview inset, stacked, so the
+   formula always sits right below the bar however many rows the bar wraps onto.
+   pointer-events: none keeps the empty space of the column from blocking the canvas;
+   the bar turns them back on for itself. */
+#topLeft {
     position: absolute;
     top: 10px;
     left: 10px;
     z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 100vw;
+    pointer-events: none;
+}
+
+/* === CONTROLS BAR === */
+#controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
 
     background: rgba(23, 23, 27, 0.8);
     padding: 10px 14px;
@@ -31,6 +53,127 @@ body {
     font-family: inherit;
     max-width: 100vw;
     box-shadow: 0 0 10px #00000055;
+}
+
+/* === EQUATION LINE === */
+/* same translucent panel as the bar, but smaller and not bold */
+#formula {
+    background: rgba(23, 23, 27, 0.8);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 400;
+    box-shadow: 0 0 10px #00000055;
+    /* long values wrap onto the next line instead of widening the panel */
+    max-width: min(460px, calc(100vw - 16px));
+    overflow-wrap: anywhere;
+}
+
+/* warning line under the equation: same panel look, amber text. .hidden is the shared helper class. */
+#precisionWarning {
+    background: rgba(23, 23, 27, 0.8);
+    color: #ffc857;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 400;
+    box-shadow: 0 0 10px #00000055;
+    max-width: min(460px, calc(100vw - 16px));
+}
+
+/* === PREVIEW INSET (BOTTOM LEFT) === */
+/* pointer-events: auto (the parent #topLeft has none) makes the box clickable: clicking or
+   tapping it jumps into what it shows. The markers inside keep none. position: fixed keeps it at the bottom-left of the screen even though it is inside #topLeft
+   (on phones it becomes part of the column instead, see the media query below). */
+#previewBox {
+    position: fixed;
+    left: 10px;
+    bottom: 10px;
+    z-index: 5;
+    pointer-events: auto;
+    cursor: pointer;
+    width: fit-content; /* as wide as its content, which is capped by the label below */
+
+    background: rgba(23, 23, 27, 0.8);
+    padding: 6px;
+    border: 1px solid #ffffff33;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #00000055;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+#previewBox canvas {
+    display: block;
+}
+
+/* The label may never be wider than the canvas (240px; 160px on phones, see the media query),
+   so the box is always canvas width + padding, whatever the values or power are. */
+#previewLabel {
+    margin-top: 4px;
+    max-width: 240px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 0.8em;
+}
+
+/* last line of the caption: small and dimmed */
+#previewLabel .hint {
+    opacity: 0.6;
+    font-size: 0.9em;
+    margin-top: 2px;
+}
+
+/* === CROSSHAIR MARKERS === */
+/* #cMarker (on the main canvas) and #previewMarker (over the inset): a white cross with a dark
+   outline so it shows on any colour. JS sets left/top to the point; translate(-50%, -50%)
+   centres the cross on it. pointer-events: none so it never blocks the canvas. */
+.marker {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 6;
+    background:
+        linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
+        linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+    filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
+}
+
+/* the small "c" / "p" label next to a main-canvas marker */
+#cMarker span,
+#pinMarker span {
+    position: absolute;
+    left: 100%;
+    top: -100%;
+    margin-left: 2px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* the "c" marker flashes after a jump: JS adds .fade after 1.2 s and the opacity change below
+   animates it out over 0.8 s (JS removes it from the page at 2 s) */
+#cMarker {
+    transition: opacity 0.8s ease;
+}
+
+#cMarker.fade {
+    opacity: 0;
+}
+
+/* reduced motion: no fade, the marker just disappears at 2 s */
+@media (prefers-reduced-motion: reduce) {
+    #cMarker {
+        transition: none;
+    }
+}
+
+/* !important: some ID rules (e.g. "#advanced label") set display and would otherwise win */
+.hidden {
+    display: none !important;
 }
 
 /* === BUTTONS (Shared Style) === */
@@ -54,12 +197,39 @@ body {
     color: white;
 }
 
+/* the 3D button is disabled without WebGL (its tooltip says why) */
+#controls button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* short message at the bottom centre (e.g. when 3D fails to start) */
+#toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(23, 23, 27, 0.9);
+    color: #ffc857;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    max-width: min(460px, calc(100vw - 32px));
+    box-shadow: 0 0 10px #00000055;
+    pointer-events: none;
+}
+
 #controls button:focus-visible,
 #advanced button:focus-visible {
     outline: 2px solid #ffffff55;
 }
 
 /* === ZOOM INPUT GROUP === */
+#zoomInput {
+    width: 9ch; /* fits "3.2×10¹⁴" */
+}
+
 #controls .inputs {
     display: flex;
     align-items: center;
@@ -84,7 +254,11 @@ body {
     max-width: 260px;
     box-shadow: 0 0 10px #00000055;
     font-size: 1em;
-    align-items: center
+    align-items: center;
+    /* The panel can be taller than a short window: stop it 10px above the bottom edge (it sits
+       10px below the top) and let it scroll. The scrollbar look is set further down. */
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
 }
 
 #advanced summary {
@@ -93,6 +267,19 @@ body {
     font-size: 1em;
     margin-bottom: 10px;
     color: white;
+    /* Stay at the top of the panel while the content scrolls, so it can always be collapsed.
+       Needs a solid background, or the scrolling controls would show through. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: rgb(23, 23, 27);
+}
+
+/* the small hints under the Reset camera button */
+#advanced #camMoveHint,
+#advanced #flyHint {
+    color: #bbb;
+    font-size: 0.85em;
 }
 
 #advanced .inputs {
@@ -100,6 +287,12 @@ body {
     flex-direction: column;
     gap: 12px;
     margin-top: 8px;
+}
+
+#advanced label.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
 }
 
 #advanced label {
@@ -111,7 +304,8 @@ body {
 }
 
 /* === INPUT FIELDS === */
-input[type="number"] {
+input[type="number"],
+input[type="text"] { /* the zoom field is text so it can show 3.2×10⁹ */
     padding: 4px 6px;
     border-radius: 4px;
     border: none;
@@ -121,7 +315,7 @@ input[type="number"] {
     color: white;
 }
 
-/* === SCROLLBAR for ADVANCED (just in case) === */
+/* === SCROLLBAR for ADVANCED (it scrolls when the window is short) === */
 #advanced::-webkit-scrollbar {
     width: 6px;
 }
@@ -161,5 +355,77 @@ input[type="number"] {
 
     #advanced label {
         font-size: 0.9em;
+    }
+}
+
+/* === PHONES / SMALL SCREENS === */
+/* Comes after the 1280px block, so on equal specificity these rules win */
+@media (max-width: 768px) {
+    /* the column spans the screen; the bar inside it wraps onto several rows */
+    #topLeft {
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        align-items: stretch;
+    }
+
+    #controls {
+        flex-wrap: wrap;
+        max-width: none;
+        gap: 6px;
+        padding: 6px 8px;
+    }
+
+    /* bigger tap targets */
+    #controls button,
+    #advanced button,
+    #controls select {
+        min-height: 36px;
+    }
+
+    /* Advanced panel moves to the bottom and scrolls when it gets tall */
+    #advanced {
+        top: auto;
+        bottom: 8px;
+        left: 8px;
+        right: 8px;
+        max-width: none;
+        max-height: 45vh;
+        overflow-y: auto;
+    }
+
+    #advanced label,
+    #advanced input {
+        width: 100%;
+    }
+
+    /* a checkbox must keep its natural size, not stretch to the full row */
+    #advanced input[type="checkbox"] {
+        width: auto;
+    }
+
+    /* The bottom is taken by the Advanced panel (up to 45vh), so the smaller inset flows in
+       the top-left column, below the formula line, and can never overlap the bar.
+       relative (not static) so the marker inside it still has a positioned parent. */
+    #previewBox {
+        position: relative;
+        left: auto;
+        bottom: auto;
+        align-self: flex-start;
+    }
+
+    #previewBox canvas {
+        width: 160px;
+        height: 107px;
+    }
+
+    #previewLabel {
+        max-width: 160px; /* same as the canvas width above */
+    }
+
+    /* iOS Safari zooms the page when focusing an input under 16px */
+    input[type="number"],
+    input[type="text"] {
+        font-size: 16px;
     }
 }

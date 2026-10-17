@@ -1,18 +1,3 @@
-//Returns number of iterations for a point to escape
-//z = zx + i*zy
-export function julia(zx, zy, c, maxIter) {
-
-    let x = zx, y = zy, iter = 0;
-    while (x*x + y*y < 4 && iter < maxIter) {
-      //z^2
-      let xtemp = x*x - y*y + c.re;
-      y = 2*x*y + c.im;
-      x = xtemp;
-      iter++;
-    }
-    return iter;
-}
-
 //Color handling
 export function hslToRgb(h, s, l) {
     s /= 100;
