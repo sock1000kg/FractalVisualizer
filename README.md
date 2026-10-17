@@ -1,9 +1,9 @@
 # Fractal Visualizer
 *(English | [Tiếng Việt](./README.vi.md))*
 
-[Live Demo](https://sock1000kg.github.io/FractalVisualizer/)
+[Live Page](https://fractal.sock1000kg.io.vn/)
 
-Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaScript using the Julia set. Explore a wide variety of mesmerizing patterns, zoom in to discover intricate details, and save your favorite fractals. Customize colors, coordinates, and more in the advanced settings to unleash your creativity. Have fun :)
+Fractal Visualizer is a browser fractal visualizer built with HTML5, JavaScript, and WebGL. Explore a wide variety of mesmerizing patterns, zoom in to discover intricate details, and save your favorite fractals. Customize colors, coordinates, and more in the advanced settings to unleash your creativity. Have fun :)
 
 ## Features
 - Interactive fractal drawing using mouse position and hue shifts
@@ -32,11 +32,16 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 The page asks the browser for the high-performance GPU, but this is only a hint. On a laptop with two GPUs on Windows, set it yourself: Settings → Display → Graphics → add your browser → Options → High performance, then restart the browser. Open `chrome://gpu` (or look for the `GPU:` line in the console) to check which GPU is in use.
 
 ## Screenshots
-<img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
 <img width="1229" height="691" alt="fractal" src="https://github.com/user-attachments/assets/026eace9-b995-48d4-9472-30d1eff6de41" />
-<img width="1920" height="1080" alt="Snow Chaos" src="https://github.com/user-attachments/assets/0005908d-0726-4d1a-ba04-2246f390eb75" />
-<img width="1222" height="591" alt="fractal (3)" src="https://github.com/user-attachments/assets/a097a270-3e62-477f-b95f-00eecbc2373a" />
-<img width="1222" height="591" alt="fractal (2)" src="https://github.com/user-attachments/assets/c870d404-6249-4a46-97b8-140778677db8" />
+<img width="1528" height="732" alt="iceland" src="https://github.com/user-attachments/assets/d0f7bf3b-47b1-498b-b1b6-e144f31a432e" />
+<img width="1912" height="948" alt="computer" src="https://github.com/user-attachments/assets/57bd24b6-0aab-416f-aa8e-834e4e924b03" />
+<img width="1528" height="732" alt="burst" src="https://github.com/user-attachments/assets/3d9fd705-2bea-4cf5-b40d-988f02b7dd2f" />
+<img width="1528" height="732" alt="streaks" src="https://github.com/user-attachments/assets/f1bc6d7a-f41f-4703-bf80-5669c11dfdce" />
+<img width="1912" height="948" alt="space" src="https://github.com/user-attachments/assets/7cb23e09-54f9-43ea-843e-ecf87bf0a901" />
+<img width="1528" height="732" alt="slope" src="https://github.com/user-attachments/assets/112accbf-e27d-46ae-97a4-647427ea4a2a" />
+<img width="1528" height="732" alt="moon" src="https://github.com/user-attachments/assets/914e2779-3c5a-457f-be19-5b38017d1eb0" />
+
+
 
 ## Credits
 I saw Carter Semrad's "I coded one project EVERY WEEK for a YEAR" and was very inspired and curious about his fractal generation project, so I decided to try and build one from scratch with my own added features.
