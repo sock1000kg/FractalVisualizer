@@ -31,6 +31,12 @@
 //             complex number) and uC (state.c)
 //     step -> one iteration, updating z; uses cpow(z, uPower) (defined in glRenderer.js)
 //     Keep these in sync with the iterate function above.
+//   glslDD:  the same fractal for the DOUBLE-FLOAT shader used when zoomed in deep (see DD_LIB in
+//            glRenderer.js). Same idea as glsl, but z and k are vec4 complex double-floats
+//            named Z and K (capitals, so they never clash with the float z / k):
+//     init -> sets Z and K from P (the pixel) and C (state.c), both vec4 complex dd numbers
+//     step -> one iteration; uses cdAdd, cdPowInt(Z, uPowerInt) and cdAbs. Whole powers only.
+//     Keep these in sync with glsl above.
 
 //SMOOTH COLOURING
 //
@@ -290,6 +296,10 @@ export const FRACTALS = {
             init: "z = p; k = uC;",
             step: "z = cpow(z, uPower) + k;",
         },
+        glslDD: {
+            init: "Z = P; K = C;",
+            step: "Z = cdAdd(cdPowInt(Z, uPowerInt), K);",
+        },
     },
     mandelbrot: {
         name: "Mandelbrot",
@@ -305,6 +315,10 @@ export const FRACTALS = {
             init: "z = uC; k = p;",
             step: "z = cpow(z, uPower) + k;",
         },
+        glslDD: {
+            init: "Z = C; K = P;",
+            step: "Z = cdAdd(cdPowInt(Z, uPowerInt), K);",
+        },
     },
     burningShip: {
         name: "Burning Ship",
@@ -319,6 +333,10 @@ export const FRACTALS = {
             init: "z = uC; k = p;",
             step: "z = cpow(abs(z), uPower) + k;",
         },
+        glslDD: {
+            init: "Z = C; K = P;",
+            step: "Z = cdAdd(cdPowInt(cdAbs(Z), uPowerInt), K);",
+        },
     },
     burningShipJulia: {
         name: "Burning Ship Julia",
@@ -332,6 +350,10 @@ export const FRACTALS = {
         glsl: {
             init: "z = p; k = uC;",
             step: "z = cpow(abs(z), uPower) + k;",
+        },
+        glslDD: {
+            init: "Z = P; K = C;",
+            step: "Z = cdAdd(cdPowInt(cdAbs(Z), uPowerInt), K);",
         },
     },
 };
