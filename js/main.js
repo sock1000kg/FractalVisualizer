@@ -1,5 +1,6 @@
 import {draw} from './draw.js';
-import {getFractal} from './fractals.js';
+import {getFractal, FRACTALS, formatComplex} from './fractals.js';
+import {complexToScreen} from './view.js';
 import {createGLRenderer} from './glRenderer.js';
 import {setupInputs} from './inputs.js';
 
@@ -54,31 +55,76 @@ function render() {
   else draw(canvas, state);
 }
 
-//JULIA PREVIEW: a second small canvas with its own renderer (a second WebGL context when
+//PREVIEW INSET: a second small canvas with its own renderer (a second WebGL context when
 //the main one is WebGL, otherwise the CPU renderer). It reuses the same drawing code as the
 //main canvas; only the state it is given differs.
 let previewCanvas = document.getElementById("preview");
 const prev = makeRenderer(previewCanvas, renderer === "webgl");
 previewCanvas = prev.canvas;
 const previewLabel = document.getElementById("previewLabel");
+const previewMarker = document.getElementById("previewMarker");
 
-//Draws the Julia set for the complex point p = {re, im}. Takes the colours, modes,
-//smoothness, power and iterations from the main state, and swaps in:
-//  fractal = the Julia type that belongs to the current one (juliaOf),
-//  c = p (the constant that picks the Julia set, see fractals.js),
-//  a view centred on (0, 0) that shows 3 units from top to bottom.
+//Draws the inset: the PARTNER of the main type (see kind / partner in fractals.js).
+//Colours, modes, smoothness, power and iterations come from the main state; the rest is
+//swapped in. What the inset shows depends on the role of the pixel in the main view:
+//  - Mandelbrot kind (the pixel is the constant p): the inset is the Julia set whose
+//    constant is the point p under the cursor. The complex point p = {re, im} is given.
+//  - Julia kind (the pixel is the start z0, and state.c is the constant): the inset is the
+//    partner Mandelbrot set, in ITS default view. It does not care about the cursor; it
+//    follows state.c, and a crosshair marks where c sits inside that Mandelbrot set
+//    ("you are here"). p is ignored.
 function renderPreview(p) {
-  const previewState = {
-    ...state,
-    fractal: getFractal(state.fractal).juliaOf,
-    c: { re: p.re, im: p.im },
-    zoom: previewCanvas.height / 3,
-    offsetX: -previewCanvas.width / 2, //same convention as the main view: offset = centre*zoom - size/2
-    offsetY: -previewCanvas.height / 2,
-  };
+  const main = getFractal(state.fractal);
+  const partnerKey = main.partner;
+  const partner = FRACTALS[partnerKey];
+  const zoom = previewCanvas.height / 3; //3 units from top to bottom
+  let previewState;
+  if (main.kind === "julia") {
+    const d = partner.defaults;
+    previewState = {
+      ...state,
+      fractal: partnerKey,
+      c: { re: d.c.re, im: d.c.im }, //the partner's own start value z0 (normally 0)
+      zoom,
+      //same convention as the main view: offset = centre*zoom - size/2
+      offsetX: d.center.re * zoom - previewCanvas.width / 2,
+      offsetY: d.center.im * zoom - previewCanvas.height / 2,
+    };
+  } else {
+    previewState = {
+      ...state,
+      fractal: partnerKey,
+      c: { re: p.re, im: p.im }, //the constant that picks the Julia set (see fractals.js)
+      zoom,
+      offsetX: -previewCanvas.width / 2, //centred on (0, 0)
+      offsetY: -previewCanvas.height / 2,
+    };
+  }
   if (prev.drawFrame) prev.drawFrame(previewState);
   else draw(previewCanvas, previewState);
-  previewLabel.textContent = `Julia at c = (${p.re.toFixed(3)}, ${p.im.toFixed(3)})`;
+
+  if (main.kind === "julia") {
+    previewLabel.textContent = `${partner.formula(previewState)}   · marker = c = ${formatComplex(state.c)}`;
+    placePreviewMarker(previewState);
+  } else {
+    previewLabel.textContent = partner.formula(previewState);
+    previewMarker.classList.add("hidden");
+  }
+}
+
+//Puts the crosshair over the inset at the point state.c. The inset is a WebGL canvas, so we
+//cannot draw on it; the marker is a small HTML element laid over it instead. complexToScreen
+//gives the position in canvas pixels; the canvas may be shown smaller than its pixel size
+//(phones), so scale to CSS pixels, then add the canvas's offset inside #previewBox.
+function placePreviewMarker(previewState) {
+  const pos = complexToScreen(previewState, state.c.re, state.c.im);
+  const inside = pos.x >= 0 && pos.x <= previewCanvas.width && pos.y >= 0 && pos.y <= previewCanvas.height;
+  previewMarker.classList.toggle("hidden", !inside);
+  if (!inside) return;
+  const scaleX = previewCanvas.clientWidth / previewCanvas.width;
+  const scaleY = previewCanvas.clientHeight / previewCanvas.height;
+  previewMarker.style.left = `${previewCanvas.offsetLeft + pos.x * scaleX}px`;
+  previewMarker.style.top = `${previewCanvas.offsetTop + pos.y * scaleY}px`;
 }
 
 const state = {
@@ -109,6 +155,10 @@ const state = {
 
   //key into FRACTALS in fractals.js (changed by the type selector)
   fractal: "julia",
+
+  //where a Julia -> Mandelbrot jump came from: the complex point {re, im} that gets a "c"
+  //crosshair on the main canvas, or null. Not saved in presets (see inputs.js)
+  markerPoint: null,
 
   //modes
   bw: false,

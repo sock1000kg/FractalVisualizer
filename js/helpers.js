@@ -1,5 +1,6 @@
 //HELPER FUNCTIONS FOR UI AND INPUTS
-import {getFractal} from './fractals.js';
+import {getFractal, FRACTALS} from './fractals.js';
+import {complexToScreen} from './view.js';
 
 export function pause(state) {
     state.pause = !state.pause;
@@ -59,10 +60,34 @@ export function updateFractalUI(fractalSelect, state) {
     fractalSelect.value = state.fractal;
 }
 
-//Shows the Julia preview only when the current type has a Julia counterpart (juliaOf in
-//the registry) AND the "Julia preview" checkbox is on. Returns true when it is visible.
+//Keeps the preview toggle and the inset box in sync with the current type.
+//  - A type without a partner has nothing to preview, so the whole toggle is hidden.
+//  - Otherwise its label names the partner ("Julia preview", "Mandelbrot preview", ...).
+//Returns true when the inset is visible (a partner exists AND the checkbox is on).
 export function updatePreviewVisibility(state, checkbox) {
-    const visible = !!getFractal(state.fractal).juliaOf && checkbox.checked;
+    const partnerKey = getFractal(state.fractal).partner;
+    const partner = FRACTALS[partnerKey];
+    document.getElementById("previewToggleLabel").classList.toggle("hidden", !partner);
+    if (partner) document.getElementById("previewToggleText").textContent = `${partner.name} preview`;
+    const visible = !!partner && checkbox.checked;
     document.getElementById("previewBox").classList.toggle("hidden", !visible);
     return visible;
+}
+
+//The equation line of the main view, with the live values (see formula in fractals.js)
+export function updateFormula(state) {
+    document.getElementById("formula").textContent = getFractal(state.fractal).formula(state);
+}
+
+//The "c" crosshair left on the main canvas after a Julia -> Mandelbrot jump. It sits on a
+//fixed complex point (state.markerPoint), so it is repositioned after every render: panning
+//and zooming change where that point is on screen. Only shown on a Mandelbrot-kind type.
+export function updateMainMarker(state) {
+    const marker = document.getElementById("cMarker");
+    const show = !!state.markerPoint && getFractal(state.fractal).kind === "mandelbrot";
+    marker.classList.toggle("hidden", !show);
+    if (!show) return;
+    const pos = complexToScreen(state, state.markerPoint.re, state.markerPoint.im);
+    marker.style.left = `${pos.x}px`;
+    marker.style.top = `${pos.y}px`;
 }

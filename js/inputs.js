@@ -4,13 +4,17 @@ import {getViewCenter, setViewCenter, applyFractalDefaults, zoomAt, screenToComp
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
 
 //api = {render, renderPreview}: render() draws the main canvas, renderPreview(p) draws the
-//Julia inset for the complex point p.
+//inset (the partner of the current type; p is the complex point under the cursor, which
+//only matters on Mandelbrot-style types).
 export function setupInputs(canvas, state, api){
     const preview = createPreview(canvas, state, api.renderPreview);
-    //Every redraw of the main canvas also refreshes the inset, so a slider, mode, preset
-    //or type change is picked up by the preview without touching each handler.
+    //Every redraw of the main canvas also refreshes the inset, the formula line and the
+    //"c" marker, so a slider, mode, preset or type change is picked up by all of them
+    //without touching each handler.
     const draw = () => {
         api.render();
+        helpers.updateFormula(state);
+        helpers.updateMainMarker(state);
         preview.refresh();
     };
     setupButtons(canvas, state, draw);
@@ -20,11 +24,14 @@ export function setupInputs(canvas, state, api){
     setupPreviewToggle(state, preview);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
+    //first paint of the pieces that normally refresh on every draw
+    helpers.updateFormula(state);
+    preview.refresh();
 }
 
-//JULIA PREVIEW CONTROLLER
+//PREVIEW CONTROLLER
 //Remembers the last cursor / finger position (screen pixels) and redraws the inset for the
-//complex point under it. The position is kept in pixels, not as a complex number, so the
+//complex point under it (on Julia-style types the inset ignores it and follows state.c). The position is kept in pixels, not as a complex number, so the
 //inset keeps following the same spot of the screen when the view pans or zooms.
 //Before the first move it uses the middle of the canvas.
 function createPreview(canvas, state, renderPreview) {
@@ -52,16 +59,31 @@ function setupPreviewToggle(state, preview) {
 }
 
 //CLICK / TAP TO JUMP
-//Leaves the current Mandelbrot-style type for its Julia counterpart (juliaOf) and uses the
-//clicked point p as the Julia constant c: that is exactly the set shown in the inset.
-//Colours, power and the other settings are kept.
+//Leaves the current type for its partner (see partner in fractals.js). Colours, power and
+//the other settings are kept. Which way we go depends on the role of the pixel:
+//  - Mandelbrot-style -> Julia: the clicked point p becomes the Julia constant c, which is
+//    exactly the set shown in the inset.
+//  - Julia-style -> Mandelbrot: the clicked point means nothing here (on a Julia the pixel
+//    is only a start value). What matters is c, the constant that made this Julia set. So
+//    the jump ignores p and uses state.c (when not paused, c already follows the cursor).
+//    We centre the Mandelbrot view on c and leave a crosshair there ("where you came from").
 const TAP_MOVE = 5; //px: moving less than this between down and up still counts as a click
-function jumpToJulia(canvas, state, p, draw) {
-    const target = FRACTALS[state.fractal].juliaOf;
+function jumpToPartner(canvas, state, p, draw) {
+    const current = FRACTALS[state.fractal];
+    const target = current.partner;
     if (!target) return;
+    const from = {re: state.c.re, im: state.c.im}; //remembered before the defaults overwrite c
+    const toMandelbrot = current.kind === "julia";
     state.fractal = target;
-    applyFractalDefaults(canvas, state); //the Julia type's default view (centre 0, 0 and its zoom)
-    state.c = {re: p.re, im: p.im};      //then the clicked point (overrides the default c)
+    applyFractalDefaults(canvas, state); //the partner's default view and zoom
+    if (toMandelbrot) {
+        //c is now the partner's z0 (normally 0); keep the default zoom, move the centre to `from`
+        setViewCenter(canvas, state, from.re, from.im);
+        state.markerPoint = from;
+    } else {
+        state.c = {re: p.re, im: p.im};  //the clicked point (overrides the default c)
+        state.markerPoint = null;        //a new Julia set: the old "came from" marker is stale
+    }
     helpers.updateFractalUI(document.getElementById("fractalSelect"), state);
     helpers.updateZoomUI(document.getElementById("zoomInput"), state);
     helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
@@ -181,6 +203,7 @@ function setupVariablesInputs (canvas, state, draw) {
     helpers.updateFractalUI(fractalSelect, state);
     fractalSelect.addEventListener("change", () => {
         state.fractal = fractalSelect.value;
+        state.markerPoint = null; //choosing a type by hand clears the "came from" marker
         applyFractalDefaults(canvas, state); //each type starts from a good view
         helpers.updateZoomUI(document.getElementById("zoomInput"), state);
         helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
@@ -351,11 +374,11 @@ function setupMouseTrack (canvas, state, draw, preview) {
         downX = e.clientX;
         downY = e.clientY;
     });
-    //click to jump into the Julia set under the cursor; a drag (pan) must not jump
+    //click to jump to the partner type (a drag, i.e. a pan, must not jump)
     canvas.addEventListener("click", (e) => {
         if (e.pointerType === "touch") return; //touch taps are handled in setupTouch
         if (Math.hypot(e.clientX - downX, e.clientY - downY) >= TAP_MOVE) return;
-        jumpToJulia(canvas, state, screenToComplex(state, e.clientX, e.clientY), draw);
+        jumpToPartner(canvas, state, screenToComplex(state, e.clientX, e.clientY), draw);
     });
     window.addEventListener("mouseup", () => {
         dragging = false;
@@ -543,7 +566,7 @@ function setupTouch (canvas, state, draw, preview) {
             const isTap = tap.ok && e.type === "pointerup" && performance.now() - tap.t < TAP_TIME;
             const {x, y} = tap;
             tap = null;
-            if (isTap) jumpToJulia(canvas, state, screenToComplex(state, x, y), draw);
+            if (isTap) jumpToPartner(canvas, state, screenToComplex(state, x, y), draw);
         }
     }
     canvas.addEventListener("pointerup", endTouch);
