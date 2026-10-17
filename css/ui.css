@@ -20,16 +20,30 @@ body {
     display: block;
 }
 
-/* === CONTROLS BAR (LEFT) === */
-#controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
+/* === TOP-LEFT COLUMN === */
+/* Holds the controls bar, the equation line and (on phones) the preview inset, stacked, so the
+   formula always sits right below the bar however many rows the bar wraps onto.
+   pointer-events: none keeps the empty space of the column from blocking the canvas;
+   the bar turns them back on for itself. */
+#topLeft {
     position: absolute;
     top: 10px;
     left: 10px;
     z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 100vw;
+    pointer-events: none;
+}
+
+/* === CONTROLS BAR === */
+#controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
 
     background: rgba(23, 23, 27, 0.8);
     padding: 10px 14px;
@@ -41,10 +55,23 @@ body {
     box-shadow: 0 0 10px #00000055;
 }
 
-/* === JULIA PREVIEW INSET (BOTTOM LEFT) === */
-/* pointer-events: none lets every click, drag and touch fall through to the main canvas */
+/* === EQUATION LINE === */
+/* same translucent panel as the bar, but smaller and not bold */
+#formula {
+    background: rgba(23, 23, 27, 0.8);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 400;
+    box-shadow: 0 0 10px #00000055;
+}
+
+/* === PREVIEW INSET (BOTTOM LEFT) === */
+/* pointer-events: none lets every click, drag and touch fall through to the main canvas.
+   position: fixed keeps it at the bottom-left of the screen even though it is inside #topLeft
+   (on phones it becomes part of the column instead, see the media query below). */
 #previewBox {
-    position: absolute;
+    position: fixed;
     left: 10px;
     bottom: 10px;
     z-index: 5;
@@ -67,8 +94,38 @@ body {
     margin-top: 4px;
 }
 
+/* === CROSSHAIR MARKERS === */
+/* #cMarker (on the main canvas) and #previewMarker (over the inset): a white cross with a dark
+   outline so it shows on any colour. JS sets left/top to the point; translate(-50%, -50%)
+   centres the cross on it. pointer-events: none so it never blocks the canvas. */
+.marker {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 6;
+    background:
+        linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
+        linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+    filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
+}
+
+/* the small "c" label next to the main-canvas marker */
+#cMarker span {
+    position: absolute;
+    left: 100%;
+    top: -100%;
+    margin-left: 2px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* !important: some ID rules (e.g. "#advanced label") set display and would otherwise win */
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 /* === BUTTONS (Shared Style) === */
@@ -211,12 +268,16 @@ input[type="number"] {
 /* === PHONES / SMALL SCREENS === */
 /* Comes after the 1280px block, so on equal specificity these rules win */
 @media (max-width: 768px) {
-    /* control bar spans the screen and wraps onto several rows */
-    #controls {
-        flex-wrap: wrap;
+    /* the column spans the screen; the bar inside it wraps onto several rows */
+    #topLeft {
         left: 8px;
         right: 8px;
         top: 8px;
+        align-items: stretch;
+    }
+
+    #controls {
+        flex-wrap: wrap;
         max-width: none;
         gap: 6px;
         padding: 6px 8px;
@@ -250,14 +311,14 @@ input[type="number"] {
         width: auto;
     }
 
-    /* The bottom is taken by the Advanced panel (up to 45vh) and the top by the control bar,
-       so the smaller inset sits at the top-right, below the bar. The bar wraps onto up to
-       about 3 rows (~130px), so the inset starts below that. */
+    /* The bottom is taken by the Advanced panel (up to 45vh), so the smaller inset flows in
+       the top-left column, below the formula line, and can never overlap the bar.
+       relative (not static) so the marker inside it still has a positioned parent. */
     #previewBox {
+        position: relative;
         left: auto;
         bottom: auto;
-        right: 8px;
-        top: 150px;
+        align-self: flex-start;
     }
 
     #previewBox canvas {
