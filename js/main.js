@@ -50,6 +50,11 @@ const renderer = main.renderer;
 console.log(`Renderer: ${renderer}`);
 window.renderer = renderer; //for debugging in the console
 
+//The magnification where the picture stops being accurate. WebGL passes the view centre as a
+//32-bit float (~7 digits), so it goes blocky near 1e5x; the CPU uses doubles (~16 digits) and
+//holds until about 1e13x. The next milestone raises the WebGL limit. Used for the warning.
+const PRECISION_LIMIT = renderer === "webgl" ? 1e5 : 1e13;
+
 //the single draw function the rest of the app calls
 function render() {
   if (drawFrame) drawFrame(state);
@@ -89,9 +94,7 @@ function renderPreview(p) {
       fractal: partnerKey,
       c: { re: d.c.re, im: d.c.im }, //the partner's own start value z0 (normally 0)
       zoom,
-      //same convention as the main view: offset = centre*zoom - size/2
-      offsetX: d.center.re * zoom - previewCanvas.width / 2,
-      offsetY: d.center.im * zoom - previewCanvas.height / 2,
+      center: { re: d.center.re, im: d.center.im }, //the partner's default centre
     };
   } else {
     previewState = {
@@ -99,8 +102,7 @@ function renderPreview(p) {
       fractal: partnerKey,
       c: { re: p.re, im: p.im }, //the constant that picks the Julia set (see fractals.js)
       zoom,
-      offsetX: -previewCanvas.width / 2, //centred on (0, 0)
-      offsetY: -previewCanvas.height / 2,
+      center: { re: 0, im: 0 }, //centred on (0, 0)
     };
   }
   if (prev.drawFrame) prev.drawFrame(previewState);
@@ -133,7 +135,7 @@ function renderPreview(p) {
 //gives the position in canvas pixels; the canvas may be shown smaller than its pixel size
 //(phones), so scale to CSS pixels, then add the canvas's offset inside #previewBox.
 function placePreviewMarker(previewState) {
-  const pos = complexToScreen(previewState, state.c.re, state.c.im);
+  const pos = complexToScreen(previewState, previewCanvas, state.c.re, state.c.im);
   const inside = pos.x >= 0 && pos.x <= previewCanvas.width && pos.y >= 0 && pos.y <= previewCanvas.height;
   previewMarker.classList.toggle("hidden", !inside);
   if (!inside) return;
@@ -163,10 +165,11 @@ const state = {
   //fractal depth: max iterations per pixel, shared by every mode
   //(higher = more detail but slower to draw)
   maxIter: 60,
+  //Auto iterations: maxIter follows the zoom (see autoIterations in view.js) instead of the slider
+  autoIter: false,
 
-  //declare (0,0) for the fractal's canvas
-  offsetX: -canvas.width / 2,
-  offsetY: -canvas.height / 2,
+  //the complex number at the middle of the canvas (see view.js for the view model)
+  center: { re: 0, im: 0 },
   c: { re: -0.7, im: 0.27015 }, //const for fractal calculations
 
   //key into FRACTALS in fractals.js (changed by the type selector)
@@ -188,7 +191,7 @@ const state = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
-  setupInputs(canvas, state, {render, renderPreview});
+  setupInputs(canvas, state, {render, renderPreview, precisionLimit: PRECISION_LIMIT});
   render();
 });
 console.log("Main script loaded");

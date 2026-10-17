@@ -1,6 +1,6 @@
 //HELPER FUNCTIONS FOR UI AND INPUTS
 import {getFractal, FRACTALS} from './fractals.js';
-import {complexToScreen} from './view.js';
+import {complexToScreen, magnification, formatMagnification, iterToSlider, autoIterations} from './view.js';
 
 export function pause(state) {
     state.pause = !state.pause;
@@ -14,8 +14,9 @@ export function updateBWUI (bwButton) {
     bwButton.classList.toggle("toggled");
     console.log("BW updated");
 }
+//the zoom field shows the MAGNIFICATION (1 = the type's default view), e.g. 2.5 or 3.2×10⁹
 export function updateZoomUI (zoomInput, state) {
-    zoomInput.value = state.zoom.toFixed(2); 
+    zoomInput.value = formatMagnification(magnification(state));
 }
 export function updateCUI (cImInput, cReInput, state) {
     cImInput.value = state.c.im;
@@ -30,11 +31,33 @@ export function updateHueSpeedUI (hueSpeedInput, state) {
     hueSpeedInput.value = state.hueSpeed.toFixed(2);
     document.getElementById("hueSpeedValue").textContent = state.hueSpeed;
 }
-//the three helpers below set both the slider and its value label
+//Auto iterations: while it is on, maxIter is computed from the zoom instead of the slider.
+//Called on every draw, so any zoom change (wheel, pinch, field, type, preset) is covered.
+//Returns true when the value changed (the slider and its label then need a refresh).
+export function applyAutoIter(state) {
+    if (!state.autoIter) return false;
+    const n = autoIterations(magnification(state));
+    const changed = n !== state.maxIter;
+    state.maxIter = n;
+    return changed;
+}
+
+//Sets the iterations slider, its value label and the Auto checkbox. The slider is on a log
+//scale (see iterToSlider in view.js), and is disabled while Auto drives the value.
 export function updateMaxIterUI (iterInput, state) {
-    iterInput.value = state.maxIter;
+    iterInput.value = iterToSlider(state.maxIter);
+    iterInput.disabled = !!state.autoIter;
+    document.getElementById("iterAutoToggle").checked = !!state.autoIter;
     document.getElementById("iterValue").textContent = state.maxIter;
 }
+
+//Shows the warning line under the formula when the magnification passes the limit of the
+//current renderer (`limit`: 1e5 for WebGL floats, 1e13 for the CPU's doubles).
+export function updatePrecisionWarning(state, limit) {
+    document.getElementById("precisionWarning").classList.toggle("hidden", magnification(state) <= limit);
+}
+
+//the two helpers below set both the slider and its value label
 export function updateSmoothnessUI (smoothInput, state) {
     smoothInput.value = state.smoothness;
     document.getElementById("smoothValue").textContent = state.smoothness;
@@ -101,7 +124,7 @@ export function updateMainMarker(state) {
     const show = !!state.markerPoint && getFractal(state.fractal).kind === "mandelbrot";
     marker.classList.toggle("hidden", !show);
     if (!show) return;
-    const pos = complexToScreen(state, state.markerPoint.re, state.markerPoint.im);
+    const pos = complexToScreen(state, document.getElementById("canvas"), state.markerPoint.re, state.markerPoint.im);
     marker.style.left = `${pos.x}px`;
     marker.style.top = `${pos.y}px`;
 }
@@ -147,7 +170,7 @@ export function updatePinMarker(state) {
     const show = !!state.pin && getFractal(state.fractal).kind === "mandelbrot";
     marker.classList.toggle("hidden", !show);
     if (!show) return;
-    const pos = complexToScreen(state, state.pin.re, state.pin.im);
+    const pos = complexToScreen(state, document.getElementById("canvas"), state.pin.re, state.pin.im);
     marker.style.left = `${pos.x}px`;
     marker.style.top = `${pos.y}px`;
 }

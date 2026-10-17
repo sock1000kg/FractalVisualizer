@@ -1,4 +1,5 @@
 import * as helpers from './helpers.js'
+import {getFractal} from './fractals.js';
 
 export function saveSettings(state) {
     const saved = JSON.parse(localStorage.getItem("fractalPresets") || "{}"); //get existing presets or make a new one
@@ -18,8 +19,8 @@ export function saveSettings(state) {
         power: state.power,
         bw: state.bw,
         simple: state.simple,
-        offsetX: state.offsetX,
-        offsetY: state.offsetY,
+        center: { re: state.center.re, im: state.center.im },
+        autoIter: state.autoIter,
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -70,8 +71,24 @@ export function loadSavedSettings(state, draw) {
     //presets saved before the Power slider used z^2
     state.power = chosen.power ?? 2;
     state.bw = chosen.bw;
-    state.offsetX = chosen.offsetX || -canvas.width / 2;
-    state.offsetY = chosen.offsetY || -canvas.height / 2;
+    state.autoIter = chosen.autoIter ?? false; //older presets have no Auto iterations
+    //Where the view sits. New presets store the centre directly. Presets saved before that
+    //stored pixel offsets (offset = centre * zoom - size/2), so convert back:
+    //    centre = (offset + size/2) / zoom
+    //using the CURRENT canvas size (the same assumption the old code made). One saved
+    //without offsets used the type's default centre.
+    if (chosen.center) {
+        state.center = { re: chosen.center.re, im: chosen.center.im };
+    } else if (chosen.offsetX !== undefined && chosen.offsetY !== undefined) {
+        const canvas = document.getElementById("canvas");
+        state.center = {
+            re: (chosen.offsetX + canvas.width / 2) / chosen.zoom,
+            im: (chosen.offsetY + canvas.height / 2) / chosen.zoom,
+        };
+    } else {
+        const d = getFractal(state.fractal).defaults.center;
+        state.center = { re: d.re, im: d.im };
+    }
 
      //Get input elements
     const zoomInput = document.getElementById("zoomInput");

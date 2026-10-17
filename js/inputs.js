@@ -1,21 +1,26 @@
 import * as helpers from './helpers.js';
 import {FRACTALS} from './fractals.js';
-import {getViewCenter, setViewCenter, applyFractalDefaults, zoomAt, screenToComplex} from './view.js';
+import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
+        parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
 
-//api = {render, renderPreview}: render() draws the main canvas, renderPreview(p) draws the
-//inset (the partner of the current type; p is the complex point under the cursor, which
-//only matters on Mandelbrot-style types).
+//api = {render, renderPreview, precisionLimit}: render() draws the main canvas, renderPreview(p)
+//draws the inset (the partner of the current type; p is the complex point under the cursor,
+//which only matters on Mandelbrot-style types). precisionLimit is the magnification past
+//which the current renderer gets inaccurate (see main.js); it drives the warning line.
 export function setupInputs(canvas, state, api){
     const preview = createPreview(canvas, state, api.renderPreview);
     //Every redraw of the main canvas also refreshes the inset, the formula line and the
     //"c" marker, so a slider, mode, preset or type change is picked up by all of them
     //without touching each handler.
     const draw = () => {
+        //Auto iterations: recompute the count from the zoom BEFORE drawing
+        if (helpers.applyAutoIter(state)) helpers.updateMaxIterUI(document.getElementById("iterInput"), state);
         api.render();
         helpers.updateFormula(state);
         helpers.updateMainMarker(state);
         helpers.updatePinMarker(state);
+        helpers.updatePrecisionWarning(state, api.precisionLimit);
         preview.refresh();
     };
     setupButtons(canvas, state, draw);
@@ -27,6 +32,9 @@ export function setupInputs(canvas, state, api){
     populateSavedDropdown();
     //first paint of the pieces that normally refresh on every draw
     helpers.updateFormula(state);
+    helpers.updateZoomUI(document.getElementById("zoomInput"), state);
+    helpers.updateMaxIterUI(document.getElementById("iterInput"), state);
+    helpers.updatePrecisionWarning(state, api.precisionLimit);
     preview.refresh();
 }
 
@@ -47,7 +55,7 @@ function createPreview(canvas, state, renderPreview) {
         //otherwise the one under the remembered position
         point() {
             if (state.pin) return state.pin;
-            return screenToComplex(state, x ?? canvas.width / 2, y ?? canvas.height / 2);
+            return screenToComplex(state, canvas, x ?? canvas.width / 2, y ?? canvas.height / 2);
         },
         //updates visibility, and redraws the inset when it is shown
         //(it runs even when the main image is paused)
@@ -85,10 +93,10 @@ function jumpToPartner(canvas, state, p, draw) {
     const from = {re: state.c.re, im: state.c.im}; //remembered before the defaults overwrite c
     const toMandelbrot = current.kind === "julia";
     state.fractal = target;
-    applyFractalDefaults(canvas, state); //the partner's default view and zoom
+    applyFractalDefaults(state); //the partner's default view and zoom
     if (toMandelbrot) {
         //c is now the partner's z0 (normally 0); keep the default zoom, move the centre to `from`
-        setViewCenter(canvas, state, from.re, from.im);
+        setViewCenter(state, from.re, from.im);
         state.markerPoint = from; //shown (and faded out) by flashMainMarker after the redraw
     } else {
         state.c = {re: p.re, im: p.im};  //the clicked point (overrides the default c)
@@ -216,7 +224,7 @@ function setupVariablesInputs (canvas, state, draw) {
         state.fractal = fractalSelect.value;
         helpers.clearMainMarker(state); //choosing a type by hand clears the "came from" marker
         state.pin = null; //and the pinned preview point
-        applyFractalDefaults(canvas, state); //each type starts from a good view
+        applyFractalDefaults(state); //each type starts from a good view
         helpers.updateZoomUI(document.getElementById("zoomInput"), state);
         helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
         draw();
@@ -226,16 +234,16 @@ function setupVariablesInputs (canvas, state, draw) {
     let zoomInput = document.getElementById("zoomInput");
     zoomInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
-            let zoomValue = parseFloat(zoomInput.value);
-            if (isNaN(zoomValue)) return;
-            
-            zoomValue = Math.max(50, Math.min(1500, zoomValue));
-            //keep the point at the screen centre fixed while the zoom changes
-            const center = getViewCenter(canvas, state);
-            state.zoom = zoomValue;
-            if(zoomValue < 50) state.zoom = 50;
-            if(zoomValue > 1500) state.zoom = 1500;
-            setViewCenter(canvas, state, center.re, center.im);
+            //the field holds a magnification (1 = the type's default view); 1e9 and 3.2×10^9 work
+            const mag = parseMagnification(zoomInput.value);
+            if (isNaN(mag)) {
+                helpers.updateZoomUI(zoomInput, state); //garbage: change nothing, show the real value again
+                return;
+            }
+            //zoom around the middle of the screen (it stays fixed), within the allowed range
+            const base = state.zoom / magnification(state); //the type's default zoom
+            zoomAt(canvas, state, canvas.width / 2, canvas.height / 2, clampZoom(state, mag * base));
+            helpers.updateZoomUI(zoomInput, state); //show the clamped / tidied value
             draw();
         }
     });
@@ -304,11 +312,19 @@ function setupVariablesInputs (canvas, state, draw) {
     iterInput.addEventListener("input", () => {
         let value = parseFloat(iterInput.value);
         if (!isNaN(value)) {
-            value = Math.max(10, Math.min(500, value)); //same range as the slider
-            state.maxIter = value;
+            state.maxIter = sliderToIter(Math.max(0, Math.min(1000, value))); //slider 0..1000 -> 10..5000
             helpers.updateMaxIterUI(iterInput, state);
             draw();
         }
+    });
+
+    //Auto iterations: the count follows the zoom; the slider is disabled while it is on
+    let iterAutoToggle = document.getElementById("iterAutoToggle");
+    iterAutoToggle.addEventListener("change", () => {
+        state.autoIter = iterAutoToggle.checked;
+        helpers.applyAutoIter(state); //draw() would do it too, but the UI below needs the value now
+        helpers.updateMaxIterUI(iterInput, state);
+        draw();
     });
 
     //Smoothness (smooth colouring) - works in every mode, including Simple
@@ -398,7 +414,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
             helpers.pause(state);
             helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
         } else {
-            state.pin = state.pin ? null : screenToComplex(state, e.clientX, e.clientY);
+            state.pin = state.pin ? null : screenToComplex(state, canvas, e.clientX, e.clientY);
             preview.setPoint(e.clientX, e.clientY); //after unpinning the inset resumes from here
         }
         draw();
@@ -422,19 +438,11 @@ function setupMouseTrack (canvas, state, draw, preview) {
         scrolling = true;
         e.preventDefault();
         const zoomAmount = 1.1;
-        //keep the point at the screen centre fixed while the zoom changes
-        const center = getViewCenter(canvas, state);
-        if(e.deltaY < 0) {
-            //Zoom in
-            state.zoom *= zoomAmount;
-            helpers.updateZoomUI(zoomInput, state);
-        }
-        else {
-            //Zoom out
-            state.zoom /= zoomAmount;
-            helpers.updateZoomUI(zoomInput, state);
-        }
-        setViewCenter(canvas, state, center.re, center.im);
+        //zoom toward the cursor: the point under it stays under it (zoomAt in view.js),
+        //within the allowed magnification range
+        const factor = e.deltaY < 0 ? zoomAmount : 1 / zoomAmount; //scroll up = zoom in
+        zoomAt(canvas, state, e.clientX, e.clientY, clampZoom(state, state.zoom * factor));
+        helpers.updateZoomUI(zoomInput, state);
         draw();
 
         //Timer to count as "end of scroll"
@@ -480,8 +488,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
                 const dx = e.clientX - lastX;
                 const dy = e.clientY - lastY;
     
-                state.offsetX -= dx;
-                state.offsetY -= dy;
+                panBy(state, dx, dy);
     
                 lastX = e.clientX;
                 lastY = e.clientY;
@@ -542,19 +549,17 @@ function setupTouch (canvas, state, draw, preview) {
                 helpers.updateCUI(cImInput, cReInput, state);
             } else {
                 //paused: drag to pan, like the mouse drag
-                state.offsetX -= g.x - prev.x;
-                state.offsetY -= g.y - prev.y;
+                panBy(state, g.x - prev.x, g.y - prev.y);
             }
         } else {
             //Pinch: scale the zoom by how much the fingers spread (dist / prevDist).
             //Guard against prevDist === 0 (both fingers on the same pixel)
             if (prev.dist > 0) {
-                zoomAt(canvas, state, g.x, g.y, state.zoom * (g.dist / prev.dist));
+                zoomAt(canvas, state, g.x, g.y, clampZoom(state, state.zoom * (g.dist / prev.dist)));
                 helpers.updateZoomUI(zoomInput, state);
             }
             //Also pan by how far the midpoint moved
-            state.offsetX -= g.x - prev.x;
-            state.offsetY -= g.y - prev.y;
+            panBy(state, g.x - prev.x, g.y - prev.y);
         }
         prev = g;
         draw();
@@ -593,11 +598,9 @@ function setupTouch (canvas, state, draw, preview) {
 function setupWindowResize (canvas, state, draw) {
     //Resize the canvas according to the window
     window.addEventListener("resize", () => {
-        //remember the centre, resize, then restore it so the view doesn't jump
-        const center = getViewCenter(canvas, state);
+        //the centre is stored directly (not as a pixel offset), so resizing keeps it in the middle
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        setViewCenter(canvas, state, center.re, center.im);
         draw();
     });
 }

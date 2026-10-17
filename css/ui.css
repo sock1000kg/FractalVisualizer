@@ -69,6 +69,18 @@ body {
     overflow-wrap: anywhere;
 }
 
+/* warning line under the equation: same panel look, amber text. .hidden is the shared helper class. */
+#precisionWarning {
+    background: rgba(23, 23, 27, 0.8);
+    color: #ffc857;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 400;
+    box-shadow: 0 0 10px #00000055;
+    max-width: min(460px, calc(100vw - 16px));
+}
+
 /* === PREVIEW INSET (BOTTOM LEFT) === */
 /* pointer-events: auto (the parent #topLeft has none) makes the box clickable: clicking or
    tapping it jumps into what it shows. The markers inside keep none. position: fixed keeps it at the bottom-left of the screen even though it is inside #topLeft
@@ -191,6 +203,10 @@ body {
 }
 
 /* === ZOOM INPUT GROUP === */
+#zoomInput {
+    width: 9ch; /* fits "3.2×10¹⁴" */
+}
+
 #controls .inputs {
     display: flex;
     align-items: center;
@@ -248,7 +264,8 @@ body {
 }
 
 /* === INPUT FIELDS === */
-input[type="number"] {
+input[type="number"],
+input[type="text"] { /* the zoom field is text so it can show 3.2×10⁹ */
     padding: 4px 6px;
     border-radius: 4px;
     border: none;
@@ -367,7 +384,8 @@ input[type="number"] {
     }
 
     /* iOS Safari zooms the page when focusing an input under 16px */
-    input[type="number"] {
+    input[type="number"],
+    input[type="text"] {
         font-size: 16px;
     }
 }
