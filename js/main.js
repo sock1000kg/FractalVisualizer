@@ -1,11 +1,13 @@
 import {draw} from './draw.js';
-import {getFractal, FRACTALS, formatComplex} from './fractals.js';
+import {getFractal, FRACTALS, formatComplex, isRaymarch} from './fractals.js';
+import {applyFractalDefaults} from './view.js';
 import {complexToScreen} from './view.js';
 import {createGLRenderer, FLOAT_LIMIT} from './glRenderer.js';
 import {createTerrainRenderer} from './terrainRenderer.js';
+import {createBulbRenderer} from './bulbRenderer.js';
 import {DEFAULT_CAM} from './mat4.js';
 import {setupInputs} from './inputs.js';
-import {setLines, updateView3DUI, showToast} from './helpers.js';
+import {setLines, updateView3DUI, showToast, syncTypeUI, setBulbOptionsEnabled} from './helpers.js';
 
 let canvas = document.getElementById("canvas");
 canvas.width = window.innerWidth;
@@ -15,14 +17,16 @@ canvas.height = window.innerHeight;
 //(getContext("2d") returns null after "webgl" was taken, and vice versa),
 //so we cannot try WebGL later and fall back on the same canvas.
 //Use ?renderer=cpu in the URL to force the CPU renderer.
-//Returns {canvas, drawFrame, limitFor, drawTerrain, renderer}: the canvas may be a fresh clone
-//(see below), so always use the returned one. drawTerrain is the 3D renderer (only built when
-//withTerrain is set, i.e. for the main canvas; null on the CPU or if it cannot be set up).
+//Returns {canvas, drawFrame, limitFor, drawTerrain, drawBulb, renderer}: the canvas may be a fresh
+//clone (see below), so always use the returned one. drawTerrain and drawBulb are the 3D renderers
+//(the terrain and the Mandelbulb / Juliabulb; only built when withTerrain is set, i.e. for the
+//main canvas; null on the CPU or if they cannot be set up).
 const forceCpu = new URLSearchParams(window.location.search).get("renderer") === "cpu";
 function makeRenderer(canvas, allowGL = true, withTerrain = false) {
   let drawFrame = null; //set when WebGL works
   let limitFor = null; //WebGL only: state -> magnification where the picture stops being accurate
   let drawTerrain = null; //set when WebGL works and the 3D terrain renderer could be built
+  let drawBulb = null; //same for the bulb renderer (it compiles its shaders lazily, so this rarely fails)
   let renderer = "cpu";
   if (allowGL && !forceCpu) {
     //preserveDrawingBuffer keeps the image after it is shown, which
@@ -41,6 +45,12 @@ function makeRenderer(canvas, allowGL = true, withTerrain = false) {
           } catch (e) {
             console.error("3D terrain renderer unavailable:", e);
           }
+          //a failure here only costs the bulb types (their options stay disabled)
+          try {
+            drawBulb = createBulbRenderer(canvas, gl).draw;
+          } catch (e) {
+            console.error("Bulb renderer unavailable:", e);
+          }
         }
       } catch (e) {
         console.error("WebGL renderer failed, using CPU:", e);
@@ -53,7 +63,7 @@ function makeRenderer(canvas, allowGL = true, withTerrain = false) {
       }
     }
   }
-  return { canvas, drawFrame, limitFor, drawTerrain, renderer };
+  return { canvas, drawFrame, limitFor, drawTerrain, drawBulb, renderer };
 }
 
 const main = makeRenderer(canvas, true, true);
@@ -70,10 +80,28 @@ window.renderer = renderer; //for debugging in the console
 //plain floats (fractional powers, or a GPU where double-float is not reliable). The CPU uses
 //doubles (~16 digits) and holds until about 1e13x.
 //The 3D terrain always uses plain floats (no double-float in a vertex shader), so its limit is 1e5.
-const precisionLimit = (s) => s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
+//The bulbs have no limit (their zoom is the camera distance, which is clamped), so no warning.
+const precisionLimit = (s) => isRaymarch(s.fractal) ? Infinity : s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
 
 //the single draw function the rest of the app calls
 function render() {
+  //A bulb type (Mandelbulb / Juliabulb) has its own raymarching renderer. If its shader fails
+  //(a driver that rejects it), switch back to Julia for good and carry on with the 2D picture below.
+  if (isRaymarch(state.fractal)) {
+    try {
+      main.drawBulb(state);
+      return;
+    } catch (e) {
+      console.error("Bulb renderer failed, back to Julia:", e);
+      main.drawBulb = null;
+      const previous = state.fractal;
+      state.fractal = "julia";
+      applyFractalDefaults(state, previous);
+      setBulbOptionsEnabled(false);
+      syncTypeUI(state);
+      showToast("The 3D bulbs are not available on this GPU: " + String(e.message).split("\n")[0]);
+    }
+  }
   //3D: draw the terrain. If its shader fails (a driver that rejects it), turn 3D off for good
   //and carry on with the normal 2D picture below.
   if (state.view3d && main.drawTerrain) {
@@ -215,6 +243,11 @@ const state = {
   //change, a preset or a jump. Not saved in presets.
   pin: null,
 
+  //the 3D bulbs (see bulbRenderer.js): the third component of the constant (c.re, c.im, cz),
+  //and their own orbit camera (separate from the terrain's cam3d: the framing differs)
+  cz: 0,
+  camBulb: { yaw: 0.6, pitch: 0.35, dist: 3.0 },
+
   //3D terrain mode (see terrainRenderer.js): the 2D fractal shown as a lit landscape
   view3d: false,
   height3d: 35, //Height slider 0..100 (how tall the terrain is)
@@ -227,7 +260,7 @@ const state = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
-  setupInputs(canvas, state, {render, renderPreview, precisionLimit, has3D: !!main.drawTerrain});
+  setupInputs(canvas, state, {render, renderPreview, precisionLimit, has3D: !!main.drawTerrain, hasBulb: !!main.drawBulb});
   render();
 });
 console.log("Main script loaded");

@@ -1,14 +1,15 @@
 import * as helpers from './helpers.js';
-import {FRACTALS} from './fractals.js';
+import {FRACTALS, getFractal, isRaymarch} from './fractals.js';
 import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
         parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
-import {DEFAULT_CAM, clampCam} from './mat4.js';
+import {DEFAULT_CAM, clampCam, BULB_LIMITS} from './mat4.js';
 
-//api = {render, renderPreview, precisionLimit}: render() draws the main canvas, renderPreview(p)
+//api = {render, renderPreview, precisionLimit, has3D, hasBulb}: render() draws the main canvas, renderPreview(p)
 //draws the inset (the partner of the current type; p is the complex point under the cursor,
 //which only matters on Mandelbrot-style types). precisionLimit is the magnification past
 //which the current renderer gets inaccurate (see main.js); it drives the warning line.
+//has3D / hasBulb say whether the terrain / bulb renderers could be built (WebGL only).
 export function setupInputs(canvas, state, api){
     const preview = createPreview(canvas, state, api.renderPreview);
     //Every redraw of the main canvas also refreshes the inset, the formula line and the
@@ -27,7 +28,7 @@ export function setupInputs(canvas, state, api){
     setupButtons(canvas, state, draw);
     setupMouseTrack(canvas, state, draw, preview);
     setupTouch(canvas, state, draw, preview);
-    setupVariablesInputs(canvas, state, draw);
+    setupVariablesInputs(canvas, state, draw, api.hasBulb);
     setupView3D(state, draw, api.has3D);
     setupPreviewToggle(state, preview, canvas, draw);
     setupWindowResize(canvas, state, draw);
@@ -67,8 +68,14 @@ function setupView3D(state, draw, has3D) {
         }
     });
 
+    //Reset camera: the terrain's camera, or the bulb's own (back to that bulb's default framing)
     document.getElementById("resetCamToggle").addEventListener("click", () => {
-        state.cam3d = { ...DEFAULT_CAM };
+        if (isRaymarch(state.fractal)) {
+            state.camBulb = { ...getFractal(state.fractal).defaults.cam };
+            helpers.updateZoomUI(document.getElementById("zoomInput"), state);
+        } else {
+            state.cam3d = { ...DEFAULT_CAM };
+        }
         draw();
     });
     helpers.updateHeightUI(heightInput, state);
@@ -76,11 +83,15 @@ function setupView3D(state, draw, has3D) {
 }
 
 //ORBIT: turn dragged pixels into camera angles (0.005 radians per pixel, about 0.3 degrees).
-//Dragging right turns the camera around the terrain, dragging down lifts it higher up.
+//Dragging right turns the camera around the terrain (or the bulb), dragging down lifts it higher
+//up. A bulb type has its own camera (state.camBulb) with its own limits; the maths is the same.
 function orbitBy(state, dxPixels, dyPixels) {
-    state.cam3d.yaw += dxPixels * 0.005;
-    state.cam3d.pitch += dyPixels * 0.005;
-    clampCam(state.cam3d);
+    const bulb = isRaymarch(state.fractal);
+    const cam = bulb ? state.camBulb : state.cam3d;
+    cam.yaw += dxPixels * 0.005;
+    cam.pitch += dyPixels * 0.005;
+    if (bulb) clampCam(cam, BULB_LIMITS);
+    else clampCam(cam);
 }
 
 //PREVIEW CONTROLLER
@@ -255,7 +266,7 @@ function setupButtons(canvas, state, draw) {
 }
 
 
-function setupVariablesInputs (canvas, state, draw) {
+function setupVariablesInputs (canvas, state, draw, hasBulb) {
     //Fractal type: options come from the registry, so new fractals show up automatically
     let fractalSelect = document.getElementById("fractalSelect");
     for (const key in FRACTALS) {
@@ -264,14 +275,16 @@ function setupVariablesInputs (canvas, state, draw) {
         option.textContent = FRACTALS[key].name;
         fractalSelect.appendChild(option);
     }
+    //the bulbs are raymarched on the GPU: without the bulb renderer (the CPU renderer) they are disabled
+    helpers.setBulbOptionsEnabled(hasBulb);
     helpers.updateFractalUI(fractalSelect, state);
     fractalSelect.addEventListener("change", () => {
+        const previous = state.fractal;
         state.fractal = fractalSelect.value;
         helpers.clearMainMarker(state); //choosing a type by hand clears the "came from" marker
         state.pin = null; //and the pinned preview point
-        applyFractalDefaults(state); //each type starts from a good view
-        helpers.updateZoomUI(document.getElementById("zoomInput"), state);
-        helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
+        applyFractalDefaults(state, previous); //each type starts from a good view (a bulb also sets power, c z, camera)
+        helpers.syncTypeUI(state); //zoom field, c, c z, power slider, 3D-only controls
         draw();
     });
 
@@ -283,6 +296,14 @@ function setupVariablesInputs (canvas, state, draw) {
             const mag = parseMagnification(zoomInput.value);
             if (isNaN(mag)) {
                 helpers.updateZoomUI(zoomInput, state); //garbage: change nothing, show the real value again
+                return;
+            }
+            if (isRaymarch(state.fractal)) {
+                //a bulb's "zoom" is the camera distance: magnification = default distance / distance
+                state.camBulb.dist = getFractal(state.fractal).defaults.cam.dist / mag;
+                clampCam(state.camBulb, BULB_LIMITS);
+                helpers.updateZoomUI(zoomInput, state);
+                draw();
                 return;
             }
             //zoom around the middle of the screen (it stays fixed), within the allowed range
@@ -396,6 +417,18 @@ function setupVariablesInputs (canvas, state, draw) {
         }
     });
 
+    //c z: the third component of the bulbs' constant (the slider is only shown for bulb types)
+    let czInput = document.getElementById("czInput");
+    czInput.addEventListener("input", () => {
+        let value = parseFloat(czInput.value);
+        if (!isNaN(value)) {
+            state.cz = Math.max(-1.5, Math.min(1.5, value));
+            helpers.updateCzUI(czInput, state);
+            draw();
+        }
+    });
+    helpers.updateCzUI(czInput, state);
+
     //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
     let saturationInput = document.getElementById("saturationInput");
     saturationInput.addEventListener("input", () => {
@@ -455,7 +488,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
     //  - Mandelbrot kind: pin the inset at the clicked point p (a second click unpins)
     //  - Julia kind: toggle pause, which freezes c and so the inset's marker (same as the P key)
     canvas.addEventListener("click", (e) => {
-        if (state.view3d) return; //3D: a click does nothing (no pin, no pause)
+        if (state.view3d || isRaymarch(state.fractal)) return; //3D: a click does nothing (no pin, no pause)
         if (e.pointerType === "touch") return; //touch has no hover drift: the finger sets the point
         if (Math.hypot(e.clientX - downX, e.clientY - downY) >= TAP_MOVE) return;
         if (FRACTALS[state.fractal].kind === "julia") {
@@ -479,7 +512,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
     });
     //right-drag pans in 3D, so keep the browser's context menu away (2D keeps it)
     canvas.addEventListener("contextmenu", (e) => {
-        if (state.view3d) e.preventDefault();
+        if (state.view3d || isRaymarch(state.fractal)) e.preventDefault();
     });
 
     //Scrolling zoom
@@ -491,7 +524,13 @@ function setupMouseTrack (canvas, state, draw, preview) {
         e.preventDefault();
         const zoomAmount = 1.1;
         const factor = e.deltaY < 0 ? zoomAmount : 1 / zoomAmount; //scroll up = zoom in
-        if (state.view3d && e.ctrlKey) {
+        if (isRaymarch(state.fractal)) {
+            //a bulb: the wheel changes the camera DISTANCE (x1.1 per notch, scroll up = closer),
+            //within the limits; that is the bulb's zoom
+            state.camBulb.dist /= factor;
+            clampCam(state.camBulb, BULB_LIMITS);
+            helpers.updateZoomUI(zoomInput, state);
+        } else if (state.view3d && e.ctrlKey) {
             //3D, Ctrl + wheel: move the CAMERA closer / farther (scroll up = closer)
             state.cam3d.dist /= factor;
             clampCam(state.cam3d);
@@ -550,8 +589,9 @@ function setupMouseTrack (canvas, state, draw, preview) {
                 const dx = e.clientX - lastX;
                 const dy = e.clientY - lastY;
     
-                //3D: a plain drag orbits the camera; Shift / right drag pans the region like 2D
-                if (state.view3d && !panDrag) orbitBy(state, dx, dy);
+                //3D: a plain drag orbits the camera; Shift / right drag pans the region like 2D.
+                //A bulb has no region to pan: every drag orbits.
+                if (isRaymarch(state.fractal) || (state.view3d && !panDrag)) orbitBy(state, dx, dy);
                 else panBy(state, dx, dy);
     
                 lastX = e.clientX;
@@ -604,9 +644,9 @@ function setupTouch (canvas, state, draw, preview) {
             return;
         }
 
-        if (g.n === 1 && state.view3d) {
-            //3D: one finger orbits the camera. c does NOT follow the finger here (unlike 2D),
-            //because the finger is needed for orbiting.
+        if (g.n === 1 && (state.view3d || isRaymarch(state.fractal))) {
+            //3D (terrain or bulb): one finger orbits the camera. c does NOT follow the finger
+            //here (unlike 2D), because the finger is needed for orbiting.
             orbitBy(state, g.x - prev.x, g.y - prev.y);
         } else if (g.n === 1) {
             preview.setPoint(g.x, g.y); //the inset follows the finger (draw() below refreshes it)
@@ -618,6 +658,13 @@ function setupTouch (canvas, state, draw, preview) {
             } else {
                 //paused: drag to pan, like the mouse drag
                 panBy(state, g.x - prev.x, g.y - prev.y);
+            }
+        } else if (isRaymarch(state.fractal)) {
+            //a bulb: pinching changes the camera distance (spreading the fingers = closer)
+            if (prev.dist > 0) {
+                state.camBulb.dist /= g.dist / prev.dist;
+                clampCam(state.camBulb, BULB_LIMITS);
+                helpers.updateZoomUI(zoomInput, state);
             }
         } else {
             //Pinch: scale the zoom by how much the fingers spread (dist / prevDist).

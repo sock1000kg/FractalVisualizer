@@ -1,5 +1,5 @@
 //HELPER FUNCTIONS FOR UI AND INPUTS
-import {getFractal, FRACTALS} from './fractals.js';
+import {getFractal, FRACTALS, isRaymarch} from './fractals.js';
 import {complexToScreen, magnification, formatMagnification, iterToSlider, autoIterations} from './view.js';
 
 export function pause(state) {
@@ -60,11 +60,50 @@ export function updatePrecisionWarning(state, limit) {
 
 //3D MODE UI: keeps the 3D button and the controls that only make sense in 3D (the Height
 //slider and Reset camera) in sync with state.view3d. Called when 3D is toggled, a preset is
-//loaded, or 3D had to be turned off.
+//loaded, a type is chosen or 3D had to be turned off.
+//A bulb type (Mandelbulb / Juliabulb) is 3D by itself: the terrain button and the Height slider
+//make no sense there and are hidden, Reset camera stays (it resets the bulb's camera), and the
+//"c z" slider (the third component of c) shows up.
 export function updateView3DUI(state) {
+    const bulb = isRaymarch(state.fractal);
     document.getElementById("view3dToggle").classList.toggle("toggled", state.view3d);
-    document.getElementById("heightLabel").classList.toggle("hidden", !state.view3d);
-    document.getElementById("resetCamToggle").classList.toggle("hidden", !state.view3d);
+    document.getElementById("view3dToggle").classList.toggle("hidden", bulb);
+    document.getElementById("heightLabel").classList.toggle("hidden", !state.view3d || bulb);
+    document.getElementById("resetCamToggle").classList.toggle("hidden", !state.view3d && !bulb);
+    document.getElementById("czLabel").classList.toggle("hidden", !bulb);
+}
+export function updateCzUI (czInput, state) {
+    czInput.value = state.cz;
+    document.getElementById("czValue").textContent = state.cz.toFixed(2);
+}
+
+//Enables / disables the bulb options of the type selector. The CPU renderer cannot draw them,
+//so without the bulb renderer they are greyed out and say why.
+export function setBulbOptionsEnabled(enabled) {
+    for (const option of document.getElementById("fractalSelect").options) {
+        const f = FRACTALS[option.value];
+        if (!f || !f.needsWebGL) continue;
+        option.disabled = !enabled;
+        option.textContent = enabled ? f.name : `${f.name} (needs WebGL)`;
+    }
+}
+
+//true when the type selector offers this type (a bulb on the CPU renderer is disabled there)
+export function isTypeAvailable(key) {
+    const option = document.querySelector(`#fractalSelect option[value="${key}"]`);
+    return !option || !option.disabled;
+}
+
+//Refreshes every control that shows a value a type change can touch: the selector, the zoom
+//field, c, c z, the power slider and the 3D-only controls. Used after a type change that did not
+//come from the selector itself (the bulb renderer failing and falling back to Julia).
+export function syncTypeUI(state) {
+    updateFractalUI(document.getElementById("fractalSelect"), state);
+    updateZoomUI(document.getElementById("zoomInput"), state);
+    updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
+    updateCzUI(document.getElementById("czInput"), state);
+    updatePowerUI(document.getElementById("powerInput"), state);
+    updateView3DUI(state);
 }
 export function updateHeightUI (heightInput, state) {
     heightInput.value = state.height3d;

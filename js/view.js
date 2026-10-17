@@ -15,7 +15,7 @@
 //the digits that matter and the image falls apart. Now the centre is stored as it is, and
 //the thing added to it, (sx - width/2) / zoom, is SMALL (a few pixels divided by a big zoom),
 //so it keeps all its digits. Only the centre needs extra precision (next milestone).
-import {getFractal} from './fractals.js';
+import {getFractal, isRaymarch} from './fractals.js';
 
 //MAGNIFICATION: what the user sees. 1x is every type's own default view, so
 //magnification = zoom / default zoom. The range is limited below by 0.1 (zoomed far out) and
@@ -24,8 +24,12 @@ import {getFractal} from './fractals.js';
 export const MIN_MAGNIFICATION = 0.1;
 export const MAX_MAGNIFICATION = 1e15;
 
+//For a 3D bulb there is no zoom in pixels per unit: its "zoom" is how close the camera is, so
+//the magnification is the default camera distance divided by the current one (2x = half as far).
 export function magnification(state) {
-    return state.zoom / getFractal(state.fractal).defaults.zoom;
+    const f = getFractal(state.fractal);
+    if (isRaymarch(state.fractal)) return f.defaults.cam.dist / state.camBulb.dist;
+    return state.zoom / f.defaults.zoom;
 }
 
 //the zoom (pixels per unit) clamped to the allowed magnification range for the current type
@@ -44,10 +48,22 @@ export function setViewCenter(state, re, im) {
     state.center = {re, im};
 }
 
-//jump to the selected fractal's default c, zoom and centre
-export function applyFractalDefaults(state) {
+//jump to the selected fractal's default c, zoom and centre.
+//prevKey is the type we are coming from (state.fractal is already the new one). A bulb sets
+//its own power (8), c, cz and camera instead of zoom and centre. Leaving a bulb for a 2D type
+//puts the power back to 2: the bulbs' power 8 would make a 2D picture look odd, and the user
+//did not choose it for 2D. This is done ONLY when the previous type was a bulb, so switching
+//between two 2D types keeps whatever power the user set, as before.
+export function applyFractalDefaults(state, prevKey = state.fractal) {
     const d = getFractal(state.fractal).defaults;
     state.c = { re: d.c.re, im: d.c.im }; //new object so the registry's defaults are never mutated
+    if (isRaymarch(state.fractal)) {
+        state.cz = d.cz;
+        state.power = d.power;
+        state.camBulb = { ...d.cam };
+        return;
+    }
+    if (isRaymarch(prevKey)) state.power = 2;
     state.zoom = d.zoom;
     setViewCenter(state, d.center.re, d.center.im);
 }

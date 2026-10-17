@@ -1,5 +1,6 @@
 import * as helpers from './helpers.js'
 import {getFractal} from './fractals.js';
+import {applyFractalDefaults} from './view.js';
 import {DEFAULT_CAM} from './mat4.js';
 
 export function saveSettings(state) {
@@ -25,6 +26,8 @@ export function saveSettings(state) {
         view3d: state.view3d,
         height3d: state.height3d,
         cam3d: { yaw: state.cam3d.yaw, pitch: state.cam3d.pitch, dist: state.cam3d.dist },
+        cz: state.cz,
+        camBulb: { yaw: state.camBulb.yaw, pitch: state.camBulb.pitch, dist: state.camBulb.dist },
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -81,6 +84,10 @@ export function loadSavedSettings(state, draw) {
     state.view3d = (chosen.view3d ?? false) && !document.getElementById("view3dToggle").disabled;
     state.height3d = chosen.height3d ?? 35;
     state.cam3d = { ...DEFAULT_CAM, ...chosen.cam3d };
+    //the bulbs (older presets have none of this): the third component of c and the bulb camera,
+    //on top of the Mandelbulb's own default framing
+    state.cz = chosen.cz ?? 0;
+    state.camBulb = { ...getFractal("mandelbulb").defaults.cam, ...chosen.camBulb };
     //Where the view sits. New presets store the centre directly. Presets saved before that
     //stored pixel offsets (offset = centre * zoom - size/2), so convert back:
     //    centre = (offset + size/2) / zoom
@@ -97,6 +104,16 @@ export function loadSavedSettings(state, draw) {
     } else {
         const d = getFractal(state.fractal).defaults.center;
         state.center = { re: d.re, im: d.im };
+    }
+
+    //A bulb preset on the CPU renderer cannot be drawn (the selector disables the bulb options
+    //there), so fall back to Julia with its own defaults, and say so.
+    const fellBack = !helpers.isTypeAvailable(state.fractal);
+    if (fellBack) {
+        const bulbName = getFractal(state.fractal).name;
+        state.fractal = "julia";
+        applyFractalDefaults(state, chosen.fractal); //Julia's view; also puts the bulb's power back to 2
+        helpers.showToast(`"${bulbName}" needs WebGL, showing Julia instead`);
     }
 
      //Get input elements
@@ -124,6 +141,7 @@ export function loadSavedSettings(state, draw) {
     helpers.updateLightnessUI(lightnessInput, state);
     helpers.updateSmoothnessUI(smoothInput, state);
     helpers.updatePowerUI(powerInput, state);
+    helpers.updateCzUI(document.getElementById("czInput"), state);
     helpers.updateHeightUI(document.getElementById("heightInput"), state);
     helpers.updateView3DUI(state);
 
