@@ -14,6 +14,9 @@
 //     c      -> starting value of state.c (the mouse-controlled parameter)
 //     center -> complex point shown in the middle of the screen
 //     zoom   -> pixels per unit of the complex plane
+//   juliaOf: (optional) key of the Julia-style type that belongs to this one. Types with
+//            this field get the Julia preview inset and click-to-jump (see the
+//            MANDELBROT <-> JULIA comment below). Types added later can opt in with it.
 //   glsl:    the same fractal written as two GLSL snippets for the WebGL renderer
 //     init -> sets the starting z and the constant k, from p (the pixel as a
 //             complex number) and uC (state.c)
@@ -70,6 +73,23 @@
 //2^60 is the limit because dot(z, z) is then below 2^120, inside the float32 range of
 //the GPU. The CPU uses the same rule so both renderers agree. Because the steps can stop
 //early, nu uses the number of extra steps actually done (extraDone), not the constant.
+//MANDELBROT <-> JULIA: why every Mandelbrot point has its own Julia set
+//
+//Both pictures iterate the SAME formula  z -> z^n + k.  They only differ in what is
+//fixed and what changes from pixel to pixel:
+//  - Julia set for a constant c:  k = c is fixed, the pixel is the STARTING value z.
+//  - Mandelbrot set:              z starts at 0, the pixel is the constant k.
+//So a Mandelbrot pixel p asks "does z -> z^n + p, started at 0, stay bounded?", and the
+//Julia set for c = p is the picture of ALL starting values for that same formula.
+//Every point p of the Mandelbrot picture therefore names exactly one Julia set:
+//  - p INSIDE the Mandelbrot set  -> the Julia set for c = p is one connected piece
+//  - p OUTSIDE the Mandelbrot set -> the Julia set for c = p is disconnected "dust"
+//Burning Ship works the same way with abs() applied before the power: its counterpart
+//is the "Burning Ship Julia" type below (fixed constant, pixel is the start).
+//
+//Note: in this app state.c on a Mandelbrot type is the starting value z0, not 0. The
+//correspondence above is exact when z0 = 0; with another z0 the Mandelbrot picture is a
+//morphed version, but p is still the constant that selects the Julia set.
 const EXTRA = 3;
 const SAFE_LOG2 = 60;
 
@@ -198,6 +218,27 @@ function burningShip(zx, zy, z0, n, maxIter, out) {
     out.smooth = escaped ? smoothValue(iter, x, y, extra, n) : maxIter;
 }
 
+//Burning Ship Julia: z -> (|x| + i|y|)^n + c, starting at the pixel.
+//The Julia counterpart of burningShip: the constant is fixed (state.c), the pixel is
+//the starting point, and abs() is applied to both parts before the power.
+function burningShipJulia(zx, zy, c, n, maxIter, out) {
+
+    let x = zx, y = zy, iter = 0, extra = 0, escaped = false;
+    while (true) {
+      if (!escaped) {
+        if (iter === maxIter) break; //hit the limit first: inside the set (checked first, like the old loop)
+        if (x*x + y*y >= 4) escaped = true;
+      }
+      if (escaped && (extra === EXTRA || tooBig(x, y, n))) break;
+      power(Math.abs(x), Math.abs(y), n);
+      x = PX + c.re;
+      y = PY + c.im;
+      if (escaped) extra++; else iter++;
+    }
+    out.iter = iter;
+    out.smooth = escaped ? smoothValue(iter, x, y, extra, n) : maxIter;
+}
+
 export const FRACTALS = {
     julia: {
         name: "Julia",
@@ -218,6 +259,7 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => mandelbrot(zx, zy, state.c, state.power, maxIter, out),
         //the set spans about re -2..0.5, so centre on -0.5
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.5, im: 0 }, zoom: 300 },
+        juliaOf: "julia", //hover preview and click-to-jump use the Julia type
         //z -> z^n + p, starting at the mouse-controlled uC
         glsl: {
             init: "z = uC; k = p;",
@@ -229,9 +271,21 @@ export const FRACTALS = {
         iterate: (zx, zy, state, maxIter, out) => burningShip(zx, zy, state.c, state.power, maxIter, out),
         //screen y points down, which shows the ship upright; centred on the main hull
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.4, im: -0.5 }, zoom: 250 },
+        juliaOf: "burningShipJulia",
         //same as Mandelbrot, with abs() of both parts before the power
         glsl: {
             init: "z = uC; k = p;",
+            step: "z = cpow(abs(z), uPower) + k;",
+        },
+    },
+    burningShipJulia: {
+        name: "Burning Ship Julia",
+        iterate: (zx, zy, state, maxIter, out) => burningShipJulia(zx, zy, state.c, state.power, maxIter, out),
+        //c is a point inside the Burning Ship's main body, so the set is connected
+        defaults: { c: { re: -0.5, im: -0.5 }, center: { re: 0, im: 0 }, zoom: 300 },
+        //like Julia (constant uC, start at the pixel) with abs() before the power
+        glsl: {
+            init: "z = p; k = uC;",
             step: "z = cpow(abs(z), uPower) + k;",
         },
     },

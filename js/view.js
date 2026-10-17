@@ -46,3 +46,13 @@ export function zoomAt(canvas, state, sx, sy, newZoom) {
     state.offsetX = re * newZoom - sx;
     state.offsetY = im * newZoom - sy;
 }
+
+//the complex number under screen pixel (sx, sy): the same mapping draw.js (and the WebGL
+//shader) use for every pixel,  re = (sx + offsetX) / zoom,  im = (sy + offsetY) / zoom.
+//Used by the Julia preview and click-to-jump, which need "the point under the cursor".
+export function screenToComplex(state, sx, sy) {
+    return {
+        re: (sx + state.offsetX) / state.zoom,
+        im: (sy + state.offsetY) / state.zoom,
+    };
+}
