@@ -12,6 +12,14 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* === CANVAS === */
+/* touch-action: none tells the browser not to scroll or pinch-zoom the page when fingers
+   are on the fractal, so our own touch handlers (js/inputs.js) get every gesture. */
+#canvas {
+    touch-action: none;
+    display: block;
+}
+
 /* === CONTROLS BAR (LEFT) === */
 #controls {
     display: flex;
@@ -161,5 +169,48 @@ input[type="number"] {
 
     #advanced label {
         font-size: 0.9em;
+    }
+}
+
+/* === PHONES / SMALL SCREENS === */
+/* Comes after the 1280px block, so on equal specificity these rules win */
+@media (max-width: 768px) {
+    /* control bar spans the screen and wraps onto several rows */
+    #controls {
+        flex-wrap: wrap;
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        max-width: none;
+        gap: 6px;
+        padding: 6px 8px;
+    }
+
+    /* bigger tap targets */
+    #controls button,
+    #advanced button,
+    #controls select {
+        min-height: 36px;
+    }
+
+    /* Advanced panel moves to the bottom and scrolls when it gets tall */
+    #advanced {
+        top: auto;
+        bottom: 8px;
+        left: 8px;
+        right: 8px;
+        max-width: none;
+        max-height: 45vh;
+        overflow-y: auto;
+    }
+
+    #advanced label,
+    #advanced input {
+        width: 100%;
+    }
+
+    /* iOS Safari zooms the page when focusing an input under 16px */
+    input[type="number"] {
+        font-size: 16px;
     }
 }
