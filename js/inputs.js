@@ -89,15 +89,16 @@ function jumpToPartner(canvas, state, p, draw) {
     if (toMandelbrot) {
         //c is now the partner's z0 (normally 0); keep the default zoom, move the centre to `from`
         setViewCenter(canvas, state, from.re, from.im);
-        state.markerPoint = from;
+        state.markerPoint = from; //shown (and faded out) by flashMainMarker after the redraw
     } else {
         state.c = {re: p.re, im: p.im};  //the clicked point (overrides the default c)
-        state.markerPoint = null;        //a new Julia set: the old "came from" marker is stale
+        helpers.clearMainMarker(state);  //a new Julia set: the old "came from" marker is stale
     }
     helpers.updateFractalUI(document.getElementById("fractalSelect"), state);
     helpers.updateZoomUI(document.getElementById("zoomInput"), state);
     helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
     draw();
+    if (toMandelbrot) helpers.flashMainMarker(state); //flash, then fade out the "c" marker
 }
 
 function setupButtons(canvas, state, draw) {
@@ -213,7 +214,7 @@ function setupVariablesInputs (canvas, state, draw) {
     helpers.updateFractalUI(fractalSelect, state);
     fractalSelect.addEventListener("change", () => {
         state.fractal = fractalSelect.value;
-        state.markerPoint = null; //choosing a type by hand clears the "came from" marker
+        helpers.clearMainMarker(state); //choosing a type by hand clears the "came from" marker
         state.pin = null; //and the pinned preview point
         applyFractalDefaults(canvas, state); //each type starts from a good view
         helpers.updateZoomUI(document.getElementById("zoomInput"), state);

@@ -106,6 +106,39 @@ export function updateMainMarker(state) {
     marker.style.top = `${pos.y}px`;
 }
 
+//Timer ids of the running "c" marker flash. Kept at module level so a new flash, a type change
+//or a preset load can cancel the old timers (otherwise they would hide the marker too early).
+let fadeTimer = null;
+let hideTimer = null;
+
+function cancelMarkerTimers() {
+    clearTimeout(fadeTimer);
+    clearTimeout(hideTimer);
+    fadeTimer = hideTimer = null;
+}
+
+//Removes the "c" marker immediately: stops any pending fade, forgets the point and hides it.
+export function clearMainMarker(state) {
+    cancelMarkerTimers();
+    state.markerPoint = null;
+    updateMainMarker(state);
+}
+
+//Shows the "c" marker (state.markerPoint must already be set) as a short flash: fully visible
+//for 1.2 s, then the CSS opacity transition fades it, and at 2 s it is removed. Calling it again
+//restarts the whole sequence.
+export function flashMainMarker(state) {
+    cancelMarkerTimers();
+    document.getElementById("cMarker").classList.remove("fade"); //back to fully visible
+    updateMainMarker(state);
+    fadeTimer = setTimeout(() => {
+        document.getElementById("cMarker").classList.add("fade"); //CSS transition does the fading
+    }, 1200);
+    hideTimer = setTimeout(() => {
+        clearMainMarker(state);
+    }, 2000);
+}
+
 //The "p" crosshair of a PINNED preview (Mandelbrot types: click the canvas to freeze the inset
 //at that point). Same idea as the "c" marker: it sits on a fixed complex point (state.pin), so
 //it is repositioned after every render to follow panning and zooming.

@@ -142,6 +142,23 @@ body {
     text-shadow: 0 0 2px #000, 0 0 2px #000;
 }
 
+/* the "c" marker flashes after a jump: JS adds .fade after 1.2 s and the opacity change below
+   animates it out over 0.8 s (JS removes it from the page at 2 s) */
+#cMarker {
+    transition: opacity 0.8s ease;
+}
+
+#cMarker.fade {
+    opacity: 0;
+}
+
+/* reduced motion: no fade, the marker just disappears at 2 s */
+@media (prefers-reduced-motion: reduce) {
+    #cMarker {
+        transition: none;
+    }
+}
+
 /* !important: some ID rules (e.g. "#advanced label") set display and would otherwise win */
 .hidden {
     display: none !important;
