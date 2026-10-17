@@ -1,5 +1,4 @@
 import * as helpers from './helpers.js'
-import {draw} from './draw.js';
 
 export function saveSettings(state) {
     const saved = JSON.parse(localStorage.getItem("fractalPresets") || "{}"); //get existing presets or make a new one
