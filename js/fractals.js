@@ -62,6 +62,8 @@
 //   deJS: (x, y, z, state) => distance   the SAME distance estimator as its GLSL de(), in JS doubles
 // because the fly camera asks it how far the nearest surface is (adaptive speed, collision, the
 // precision warning) through getFractal(state.fractal).deJS, whatever the fly type is.
+// The bulbs have a deJS too (the cursor picking of the zoom, pick.js), but that does NOT make them fly types:
+// being flown is decided by  camera: "fly"  alone (isFly), never by the presence of deJS.
 
 //SMOOTH COLOURING
 //
@@ -315,6 +317,8 @@ function burningShipJulia(zx, zy, c, n, maxIter, out) {
     out.smooth = escaped ? smoothValue(iter, x, y, extra, n) : maxIter;
 }
 
+//The floor of the sample distance of the shader's normal (see march.normalFloor in bulbRenderer.js)
+const BULB_NORMAL_FLOOR = 2.0e-7;
 export const FRACTALS = {
     julia: {
         name: "Julia",
@@ -418,6 +422,8 @@ export const FRACTALS = {
             init: "vec3 v = uC3; vec3 k = pos;",
             drPlus: "1.0",
         },
+        march: { normalFloor: BULB_NORMAL_FLOOR },
+        deJS: (x, y, z, state) => bulbDE(x, y, z, state, false),
     },
     juliabulb: {
         name: "Juliabulb",
@@ -431,6 +437,8 @@ export const FRACTALS = {
             init: "vec3 v = pos; vec3 k = uC3;",
             drPlus: "0.0",
         },
+        march: { normalFloor: BULB_NORMAL_FLOOR },
+        deJS: (x, y, z, state) => bulbDE(x, y, z, state, true),
     },
     //MANDELBOX: a 3D fractal made of FOLDS instead of powers. Each step takes the point z and
     //  1. BOX FOLD:    every coordinate is mirrored back into the box -1..1. A coordinate beyond
@@ -590,6 +598,45 @@ float de(vec3 p, out float trap) {
         },
     },
 };
+
+//The BULB distance estimator in JavaScript doubles: the SAME maths as the shared GLSL de() built in
+//bulbRenderer.js (keep them in sync). The cursor picking of the zoom (pick.js) runs it on the CPU.
+//  julia  false = Mandelbulb: v starts at the constant (c.re, c.im, cz), k = the point, drPlus 1
+//         true  = Juliabulb:  v starts at the point, k = the constant, drPlus 0
+//state needs power, c, cz and maxIter. The iteration cap (64) and the bailout (2) are the shader's.
+const BULB_ITER_CAP = 64;
+export function bulbDE(x, y, z, state, julia) {
+    const n = state.power;
+    const drPlus = julia ? 0 : 1;
+    const cx = state.c.re, cy = state.c.im, cz = state.cz;
+    const kx = julia ? cx : x, ky = julia ? cy : y, kz = julia ? cz : z;
+    let vx = julia ? x : cx, vy = julia ? y : cy, vz = julia ? z : cz;
+    let dr = 1.0;
+    let r = Math.hypot(vx, vy, vz);
+    const iters = Math.min(BULB_ITER_CAP, state.maxIter);
+    for (let i = 0; i < iters; i++) {
+        if (r > 2.0) break; //escaped: the bailout radius
+        if (r > 0.0) {
+            dr = n * Math.pow(r, n - 1.0) * dr + drPlus;
+            //acos wants -1..1: clamp, as the shader does
+            const theta = Math.acos(Math.max(-1, Math.min(1, vz / r)));
+            //atan2(0, 0) has no angle: use 0, as the shader does
+            const phi = (vx === 0 && vy === 0) ? 0 : Math.atan2(vy, vx);
+            const nt = n * theta, np = n * phi;
+            const rn = Math.pow(r, n);
+            vx = rn * Math.sin(nt) * Math.cos(np) + kx;
+            vy = rn * Math.sin(nt) * Math.sin(np) + ky;
+            vz = rn * Math.cos(nt) + kz;
+        } else {
+            dr = drPlus;
+            vx = kx; vy = ky; vz = kz;
+        }
+        r = Math.hypot(vx, vy, vz);
+    }
+    //the same floors as the shader: r off 0 for log(), dr off 0 for the division
+    const rr = Math.max(r, 1.0e-6);
+    return 0.5 * Math.log(rr) * rr / Math.max(dr, 1.0e-6);
+}
 
 //The Kleinian distance estimator in JavaScript doubles: the SAME maths as the GLSL de() above (keep
 //them in sync). state needs kleinSize, c, cz and maxIter.

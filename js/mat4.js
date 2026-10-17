@@ -115,9 +115,13 @@ export const TERRAIN_LIMITS = {
     target: CAM_TARGET, targetMin: [-1.5, -0.5, -1.5], targetMax: [1.5, 1.5, 1.5],
 };
 //A bulb is seen from every side, so the pitch may go (nearly) all the way over the poles.
-//The distance stops just outside the unit sphere (a bulb reaches out to about 1.2).
+//The distance used to stop just outside the unit sphere, because the camera circled the middle of the
+//bulb. Now the wheel moves the orbit target onto the surface you zoom into (inputs.js), so the camera
+//may come as close as it likes. distMin is only a floor far below what the GPU can show: float32
+//positions resolve about 6e-8, so the picture is noise long before dist reaches 1e-4 (the precision
+//warning appears at 3e3x, dist = 1e-3).
 export const BULB_LIMITS = {
-    pitchMin: -1.45, pitchMax: 1.45, distMin: 1.02, distMax: 8,
+    pitchMin: -1.45, pitchMax: 1.45, distMin: 1e-4, distMax: 8,
     target: BULB_TARGET, targetMin: [-3, -3, -3], targetMax: [3, 3, 3],
 };
 
@@ -133,6 +137,24 @@ export function orbitEye(cam, target = cam.target ?? CAM_TARGET) {
         target[1] + cam.dist * Math.sin(cam.pitch),
         target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw),
     ];
+}
+
+//The INVERSE of orbitEye: given where the eye is and what it orbits, find the {yaw, pitch, dist} that
+//put the orbit camera exactly there. orbitEye says  eye = target + dist * (cos(p) sin(y), sin(p), cos(p) cos(y)),
+//so with d = eye - target:
+//    dist  = |d|             (the length of d)
+//    pitch = asin(d.y/dist)  (the height part, sin(p) = d.y / dist)
+//    yaw   = atan2(d.x, d.z) (d.x / d.z = tan(y), and atan2 picks the right quadrant)
+//The zoom to the cursor moves BOTH the eye and the target, then calls this to get the angles and
+//distance that describe the new pair, because the camera state only stores yaw, pitch and dist.
+export function orbitFromEyeTarget(eye, target) {
+    const d = sub(eye, target);
+    const dist = Math.hypot(d[0], d[1], d[2]);
+    return {
+        yaw: Math.atan2(d[0], d[2]),
+        pitch: Math.asin(Math.max(-1, Math.min(1, d[1] / dist))),
+        dist,
+    };
 }
 
 //the view matrix of an orbit camera
