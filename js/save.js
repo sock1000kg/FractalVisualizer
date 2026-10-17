@@ -53,6 +53,7 @@ export function loadSavedSettings(state, draw) {
 
     //presets saved before fractal types existed were all Julia
     state.fractal = chosen.fractal ?? "julia";
+    state.pin = null; //the pinned preview point belongs to the old view too
     state.markerPoint = null; //a loaded preset is a new view, so the "came from" marker goes
     state.zoom = chosen.zoom;
     state.c.re = chosen.c.re;

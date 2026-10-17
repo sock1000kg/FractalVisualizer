@@ -15,13 +15,14 @@ export function setupInputs(canvas, state, api){
         api.render();
         helpers.updateFormula(state);
         helpers.updateMainMarker(state);
+        helpers.updatePinMarker(state);
         preview.refresh();
     };
     setupButtons(canvas, state, draw);
     setupMouseTrack(canvas, state, draw, preview);
     setupTouch(canvas, state, draw, preview);
     setupVariablesInputs(canvas, state, draw);
-    setupPreviewToggle(state, preview);
+    setupPreviewToggle(state, preview, canvas, draw);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
     //first paint of the pieces that normally refresh on every draw
@@ -42,8 +43,10 @@ function createPreview(canvas, state, renderPreview) {
             x = sx;
             y = sy;
         },
-        //the complex point under the remembered position
+        //the complex point the inset is drawn for: the pinned point if there is one,
+        //otherwise the one under the remembered position
         point() {
+            if (state.pin) return state.pin;
             return screenToComplex(state, x ?? canvas.width / 2, y ?? canvas.height / 2);
         },
         //updates visibility, and redraws the inset when it is shown
@@ -54,12 +57,18 @@ function createPreview(canvas, state, renderPreview) {
     };
 }
 
-function setupPreviewToggle(state, preview) {
+function setupPreviewToggle(state, preview, canvas, draw) {
     document.getElementById("previewToggle").addEventListener("change", () => preview.refresh());
+    //CLICK / TAP THE INSET to jump into exactly what it shows. Julia-style types ignore the
+    //point (they jump to state.c); Mandelbrot-style types use point(): pinned, else last cursor.
+    document.getElementById("previewBox").addEventListener("click", () => {
+        jumpToPartner(canvas, state, preview.point(), draw);
+    });
 }
 
-//CLICK / TAP TO JUMP
-//Leaves the current type for its partner (see partner in fractals.js). Colours, power and
+//JUMP (click or tap the inset)
+//Only the inset triggers it (clicks on the main canvas pin or pause instead, see
+//setupMouseTrack). Leaves the current type for its partner (see partner in fractals.js). Colours, power and
 //the other settings are kept. Which way we go depends on the role of the pixel:
 //  - Mandelbrot-style -> Julia: the clicked point p becomes the Julia constant c, which is
 //    exactly the set shown in the inset.
@@ -72,6 +81,7 @@ function jumpToPartner(canvas, state, p, draw) {
     const current = FRACTALS[state.fractal];
     const target = current.partner;
     if (!target) return;
+    state.pin = null; //a jump starts a new view, so any pin goes
     const from = {re: state.c.re, im: state.c.im}; //remembered before the defaults overwrite c
     const toMandelbrot = current.kind === "julia";
     state.fractal = target;
@@ -204,6 +214,7 @@ function setupVariablesInputs (canvas, state, draw) {
     fractalSelect.addEventListener("change", () => {
         state.fractal = fractalSelect.value;
         state.markerPoint = null; //choosing a type by hand clears the "came from" marker
+        state.pin = null; //and the pinned preview point
         applyFractalDefaults(canvas, state); //each type starts from a good view
         helpers.updateZoomUI(document.getElementById("zoomInput"), state);
         helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
@@ -374,11 +385,29 @@ function setupMouseTrack (canvas, state, draw, preview) {
         downX = e.clientX;
         downY = e.clientY;
     });
-    //click to jump to the partner type (a drag, i.e. a pan, must not jump)
+    //A click (not a drag, i.e. a pan) on the canvas never changes the type; jumping is done by
+    //clicking the inset. Why: the inset follows the cursor (Mandelbrot types) or c (Julia types),
+    //so it would change on the way to it. A click therefore freezes what it shows first:
+    //  - Mandelbrot kind: pin the inset at the clicked point p (a second click unpins)
+    //  - Julia kind: toggle pause, which freezes c and so the inset's marker (same as the P key)
     canvas.addEventListener("click", (e) => {
-        if (e.pointerType === "touch") return; //touch taps are handled in setupTouch
+        if (e.pointerType === "touch") return; //touch has no hover drift: the finger sets the point
         if (Math.hypot(e.clientX - downX, e.clientY - downY) >= TAP_MOVE) return;
-        jumpToPartner(canvas, state, screenToComplex(state, e.clientX, e.clientY), draw);
+        if (FRACTALS[state.fractal].kind === "julia") {
+            helpers.pause(state);
+            helpers.updatePauseUI(document.getElementById("pauseToggle"), state);
+        } else {
+            state.pin = state.pin ? null : screenToComplex(state, e.clientX, e.clientY);
+            preview.setPoint(e.clientX, e.clientY); //after unpinning the inset resumes from here
+        }
+        draw();
+    });
+    //Esc unpins
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && state.pin) {
+            state.pin = null;
+            draw();
+        }
     });
     window.addEventListener("mouseup", () => {
         dragging = false;
@@ -469,11 +498,8 @@ function setupMouseTrack (canvas, state, draw, preview) {
 //follow several fingers at once. We only handle pointerType "touch"; the mouse keeps using
 //the mouse handlers above, so desktop behaviour is unchanged.
 //One finger: moves c (or pans when paused). Two fingers: pinch zoom + pan together.
+//A tap on the canvas does nothing; to jump, tap the inset (see setupPreviewToggle).
 function setupTouch (canvas, state, draw, preview) {
-    //TAP detection: a tap is one finger, moved < TAP_MOVE px, lifted within TAP_TIME ms, with
-    //no second finger at any point. tapOk goes false as soon as one of those is broken.
-    const TAP_TIME = 300;
-    let tap = null; //{x, y, t, ok} for the current touch sequence
     const touches = new Map(); //pointerId -> {x, y}: the fingers currently down (Map keeps insertion order)
     let prev = null; //reference from the previous frame: {x, y} for 1 finger, {x, y, dist} for 2 fingers
     let drawScheduled = false;
@@ -538,15 +564,12 @@ function setupTouch (canvas, state, draw, preview) {
         e.preventDefault(); //stops the browser sending fake mouse events after the touch
         canvas.setPointerCapture(e.pointerId); //keep receiving this finger's events even if it leaves the canvas
         touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
-        if (touches.size === 1) tap = {x: e.clientX, y: e.clientY, t: performance.now(), ok: true};
-        else if (tap) tap.ok = false; //a second finger: this is a pinch, never a tap
         resetReference(); //finger count changed -> new reference
     });
 
     canvas.addEventListener("pointermove", (e) => {
         if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
         touches.set(e.pointerId, {x: e.clientX, y: e.clientY}); //always store the latest position
-        if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) >= TAP_MOVE) tap.ok = false;
         if (!drawScheduled) {
             drawScheduled = true;
             requestAnimationFrame(() => { //at most one update per screen refresh; uses the latest positions
@@ -561,13 +584,6 @@ function setupTouch (canvas, state, draw, preview) {
         touches.delete(e.pointerId);
         if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
         resetReference(); //e.g. 2 fingers -> 1: the remaining finger becomes the new start point
-        //last finger lifted: was it a quick, still, single-finger tap? then jump (pointercancel never taps)
-        if (touches.size === 0 && tap) {
-            const isTap = tap.ok && e.type === "pointerup" && performance.now() - tap.t < TAP_TIME;
-            const {x, y} = tap;
-            tap = null;
-            if (isTap) jumpToPartner(canvas, state, screenToComplex(state, x, y), draw);
-        }
     }
     canvas.addEventListener("pointerup", endTouch);
     canvas.addEventListener("pointercancel", endTouch);

@@ -74,9 +74,23 @@ export function updatePreviewVisibility(state, checkbox) {
     return visible;
 }
 
-//The equation line of the main view, with the live values (see formula in fractals.js)
+//Replaces the content of `el` with one <div> per line. Each line is set with textContent
+//(never innerHTML), so the values can never be read as HTML. An optional second argument per
+//line is a CSS class (used for the dimmed hint line).
+export function setLines(el, lines) {
+    el.replaceChildren(...lines.map(([text, className]) => {
+        const div = document.createElement("div");
+        div.textContent = text;
+        if (className) div.className = className;
+        return div;
+    }));
+}
+
+//The equation of the main view, with the live values (see formula in fractals.js):
+//line 1 is "title: equation", line 2 the meaning of the pixel and of c
 export function updateFormula(state) {
-    document.getElementById("formula").textContent = getFractal(state.fractal).formula(state);
+    const f = getFractal(state.fractal).formula(state);
+    setLines(document.getElementById("formula"), [[`${f.title}: ${f.eq}`], [f.vars]]);
 }
 
 //The "c" crosshair left on the main canvas after a Julia -> Mandelbrot jump. It sits on a
@@ -88,6 +102,19 @@ export function updateMainMarker(state) {
     marker.classList.toggle("hidden", !show);
     if (!show) return;
     const pos = complexToScreen(state, state.markerPoint.re, state.markerPoint.im);
+    marker.style.left = `${pos.x}px`;
+    marker.style.top = `${pos.y}px`;
+}
+
+//The "p" crosshair of a PINNED preview (Mandelbrot types: click the canvas to freeze the inset
+//at that point). Same idea as the "c" marker: it sits on a fixed complex point (state.pin), so
+//it is repositioned after every render to follow panning and zooming.
+export function updatePinMarker(state) {
+    const marker = document.getElementById("pinMarker");
+    const show = !!state.pin && getFractal(state.fractal).kind === "mandelbrot";
+    marker.classList.toggle("hidden", !show);
+    if (!show) return;
+    const pos = complexToScreen(state, state.pin.re, state.pin.im);
     marker.style.left = `${pos.x}px`;
     marker.style.top = `${pos.y}px`;
 }
