@@ -275,8 +275,9 @@ body {
     background-color: rgb(23, 23, 27);
 }
 
-/* the small hint under the Reset camera button */
-#advanced #camMoveHint {
+/* the small hints under the Reset camera button */
+#advanced #camMoveHint,
+#advanced #flyHint {
     color: #bbb;
     font-size: 0.85em;
 }

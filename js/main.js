@@ -97,6 +97,7 @@ window.renderer = renderer; //for debugging in the console
 //doubles (~16 digits) and holds until about 1e13x.
 //The 3D terrain always uses plain floats (no double-float in a vertex shader), so its limit is 1e5.
 //The bulbs have no limit (their zoom is the camera distance, which is clamped), so no warning.
+//The Mandelbox's warning depends on how close the fly camera is to a surface (helpers.js), not on a zoom.
 const precisionLimit = (s) => isRaymarch(s.fractal) ? Infinity : s.view3d ? FLOAT_LIMIT : main.limitFor ? main.limitFor(s) : 1e13;
 
 //the single draw function the rest of the app calls
@@ -263,6 +264,12 @@ const state = {
   //and their own orbit camera (separate from the terrain's cam3d: the framing differs)
   cz: 0,
   camBulb: { yaw: 0.6, pitch: 0.35, dist: 3.0 },
+
+  //the Mandelbox: its scale (the Scale slider) and its FLY camera (see flyBasis in mat4.js):
+  //position, the two look angles, and the speed multiplier the wheel changes. Same start as the
+  //Mandelbox's defaults in fractals.js (yaw = pi looks towards -z).
+  scale: -1.5,
+  camFly: { pos: [0, 0, 7], yaw: Math.PI, pitch: 0, speed: 1 },
 
   //3D terrain mode (see terrainRenderer.js): the 2D fractal shown as a lit landscape
   view3d: false,

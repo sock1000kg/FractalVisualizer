@@ -1,9 +1,9 @@
 import * as helpers from './helpers.js';
-import {FRACTALS, getFractal, isRaymarch} from './fractals.js';
+import {FRACTALS, getFractal, isRaymarch, isFly, mandelboxDE} from './fractals.js';
 import {setViewCenter, applyFractalDefaults, zoomAt, panBy, screenToComplex, clampZoom, magnification,
         parseMagnification, sliderToIter} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
-import {DEFAULT_CAM, clampCam, moveTarget, TERRAIN_LIMITS, BULB_LIMITS} from './mat4.js';
+import {DEFAULT_CAM, clampCam, moveTarget, TERRAIN_LIMITS, BULB_LIMITS, flyBasis, FLY_PITCH_MAX} from './mat4.js';
 import {FOV_Y as TERRAIN_FOV_Y} from './terrainRenderer.js';
 import {FOV_Y as BULB_FOV_Y} from './bulbRenderer.js';
 
@@ -28,6 +28,7 @@ export function setupInputs(canvas, state, api){
         preview.refresh();
     };
     setupButtons(canvas, state, draw);
+    setupFlyKeys(state, draw);
     setupMouseTrack(canvas, state, draw, preview);
     setupTouch(canvas, state, draw, preview);
     setupVariablesInputs(canvas, state, draw, api.hasBulb);
@@ -70,9 +71,13 @@ function setupView3D(state, draw, has3D) {
         }
     });
 
-    //Reset camera: the terrain's camera, or the bulb's own (back to that bulb's default framing)
+    //Reset camera: the terrain's camera, the bulb's own (back to that bulb's default framing) or the
+    //Mandelbox's fly camera (back to its start position)
     document.getElementById("resetCamToggle").addEventListener("click", () => {
-        if (isRaymarch(state.fractal)) {
+        if (isFly(state.fractal)) {
+            const d = getFractal(state.fractal).defaults.camFly;
+            state.camFly = { ...d, pos: [...d.pos] }; //a copy, so flying never changes the registry
+        } else if (isRaymarch(state.fractal)) {
             state.camBulb = { ...getFractal(state.fractal).defaults.cam };
             helpers.updateZoomUI(document.getElementById("zoomInput"), state);
         } else {
@@ -103,6 +108,138 @@ function moveCameraBy(state, canvas, dxPixels, dyPixels) {
     const bulb = isRaymarch(state.fractal);
     if (bulb) moveTarget(state.camBulb, dxPixels, dyPixels, canvas.height, BULB_LIMITS, BULB_FOV_Y);
     else moveTarget(state.cam3d, dxPixels, dyPixels, canvas.height, TERRAIN_LIMITS, TERRAIN_FOV_Y);
+}
+
+//THE FLY CAMERA (Mandelbox): WASD / arrows move, Q/E go down / up, the mouse looks, the wheel sets the
+//speed, Shift boosts. The camera is state.camFly = {pos, yaw, pitch, speed} (see flyBasis in mat4.js).
+//
+//THE AXES. Moving is done along the camera's own axes from flyBasis:
+//  W / S (and Up / Down)    along forward, + / -
+//  D / A (and Right / Left) along right,   + / -   (strafing: sideways without turning)
+//  E / Q                    along the WORLD y axis, up / down (not the camera's up: tilting the
+//                           view must not change what "up" means, like a lift in a building)
+//
+//DISTANCE-ADAPTIVE SPEED. A fixed speed is wrong in a fractal: fast enough to cross the whole
+//structure is far too fast to look at a detail the size of a pixel, and slow enough for that
+//detail takes forever in open space. The distance estimator knows how far the nearest surface is
+//(mandelboxDE in fractals.js, the same maths as the shader), so the speed is made PROPORTIONAL to
+//it:   speedNow = speed * clamp(DE, 1e-5, 5)   units per second.
+//Near a wall the camera slows down by itself (each step covers a fraction of the remaining
+//distance, so you can glide towards a surface forever and never reach it), and in open space it
+//speeds up, up to 5 units per second. That is what lets you fly from the outside right down into
+//tiny details with the same keys. `speed` (the wheel) scales all of this; Shift multiplies by 4.
+const FLY_DE_MIN = 1e-5; //below this the camera counts as touching a surface
+const FLY_DE_MAX = 5; //above this the speed stops growing (open space)
+const FLY_BOOST = 4;
+const FLY_SPEED_MIN = 0.01;
+const FLY_SPEED_MAX = 100;
+const FLY_LOOK = 0.004; //radians per dragged pixel
+
+const FLY_KEYS = { //key code -> [forward, right, up] weights
+    KeyW: [1, 0, 0], ArrowUp: [1, 0, 0],
+    KeyS: [-1, 0, 0], ArrowDown: [-1, 0, 0],
+    KeyD: [0, 1, 0], ArrowRight: [0, 1, 0],
+    KeyA: [0, -1, 0], ArrowLeft: [0, -1, 0],
+    KeyE: [0, 0, 1],
+    KeyQ: [0, 0, -1],
+};
+
+//the speed in units per second right now (see above)
+export function flySpeedNow(state, boost = false) {
+    const [x, y, z] = state.camFly.pos;
+    const de = Math.max(FLY_DE_MIN, Math.min(FLY_DE_MAX, mandelboxDE(x, y, z, state)));
+    return state.camFly.speed * de * (boost ? FLY_BOOST : 1);
+}
+
+//Moves the camera by `amount` units along the camera-relative direction (forward, right, up) =
+//(f, r, u) weights (any length, it is normalised here). COLLISION: if the new position is inside the
+//surface (DE below FLY_DE_MIN) the camera does not move: it cannot pass through walls. Two details:
+//  - A single step is never longer than 0.9 * DE(here). The DE says nothing is closer than that, so
+//    the step cannot jump over a thin wall (the same guarantee that makes raymarching safe). Without
+//    it a big speed (wheel up, Shift, a slow frame) could step clean through a wall.
+//  - A camera that is ALREADY that close (it started there, or a preset put it there) may move if that
+//    does not get it closer, otherwise it would be stuck for good.
+export function flyMove(state, f, r, u, amount) {
+    const cam = state.camFly;
+    const {forward, right} = flyBasis(cam);
+    const dir = [0, 1, 2].map((i) => forward[i] * f + right[i] * r + (i === 1 ? u : 0)); //up is the world y axis
+    const len = Math.hypot(dir[0], dir[1], dir[2]);
+    if (len === 0 || !isFinite(amount)) return false;
+    const here = mandelboxDE(cam.pos[0], cam.pos[1], cam.pos[2], state);
+    if (here >= FLY_DE_MIN) amount = Math.min(amount, 0.9 * here);
+    const next = [0, 1, 2].map((i) => cam.pos[i] + dir[i] / len * amount);
+    const there = mandelboxDE(next[0], next[1], next[2], state);
+    if (there < FLY_DE_MIN && there < here) return false;
+    cam.pos = next;
+    return true;
+}
+
+//Turns the camera by a mouse / finger drag of (dx, dy) pixels. The look is like a first-person
+//game: dragging right turns the view RIGHT. Increasing yaw turns the camera to the LEFT (forward goes
+//from +z towards +x, and +x is on the left when looking along +z), so dragging right (dx > 0)
+//DEcreases yaw. Screen y grows downward, so dragging down (dy > 0) looks down: pitch decreases.
+export function flyLook(state, dx, dy) {
+    const cam = state.camFly;
+    cam.yaw -= dx * FLY_LOOK;
+    cam.pitch = Math.max(-FLY_PITCH_MAX, Math.min(FLY_PITCH_MAX, cam.pitch - dy * FLY_LOOK));
+}
+
+//The wheel sets the speed: x1.25 per notch up, x0.8 down, within FLY_SPEED_MIN..FLY_SPEED_MAX.
+export function flyWheelSpeed(state, deltaY) {
+    const cam = state.camFly;
+    cam.speed = Math.max(FLY_SPEED_MIN, Math.min(FLY_SPEED_MAX, cam.speed * (deltaY < 0 ? 1.25 : 0.8)));
+}
+
+//KEYBOARD. Held keys are tracked, and a requestAnimationFrame loop runs ONLY while a movement key is
+//held (so an idle page redraws nothing): each frame it moves by speedNow * dt and redraws. dt is the
+//time since the last frame, clamped to 0.1 s so a stalled tab does not teleport the camera.
+//Keys are ignored while a form control has focus (typing a number must not fly) and when the
+//current type is not a fly type. Arrow keys are only swallowed (preventDefault) in fly mode, so the
+//page keeps scrolling with them everywhere else.
+function setupFlyKeys(state, draw) {
+    const held = new Set(); //codes of the movement keys now down
+    let boost = false; //Shift
+    let frame = null;
+    let last = 0;
+
+    const typing = (el) => !!el && (["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) || el.isContentEditable);
+
+    function step(now) {
+        frame = null;
+        if (!isFly(state.fractal) || held.size === 0) return;
+        const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
+        last = now;
+        let f = 0, r = 0, u = 0;
+        for (const code of held) {
+            f += FLY_KEYS[code][0];
+            r += FLY_KEYS[code][1];
+            u += FLY_KEYS[code][2];
+        }
+        flyMove(state, f, r, u, flySpeedNow(state, boost) * dt);
+        draw();
+        frame = requestAnimationFrame(step);
+    }
+
+    document.addEventListener("keydown", (e) => {
+        boost = e.shiftKey;
+        if (!isFly(state.fractal) || typing(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (!(e.code in FLY_KEYS)) return;
+        if (e.code.startsWith("Arrow")) e.preventDefault(); //no page scrolling while flying
+        held.add(e.code);
+        if (frame === null) {
+            last = performance.now();
+            frame = requestAnimationFrame(step);
+        }
+    });
+    document.addEventListener("keyup", (e) => {
+        boost = e.shiftKey;
+        held.delete(e.code); //always, so a key released while a field had focus never sticks
+    });
+    //the window lost focus: no keyup will come for the keys that are down
+    window.addEventListener("blur", () => {
+        held.clear();
+        boost = false;
+    });
 }
 
 //PREVIEW CONTROLLER
@@ -235,6 +372,7 @@ function setupButtons(canvas, state, draw) {
     if(savedSelect) {
         savedSelect.addEventListener("change", () => {
             loadSavedSettings(state, draw);
+            savedSelect.blur(); //so a loaded Mandelbox can be flown at once (keys are ignored in a focused select)
         });
     }
 
@@ -296,6 +434,8 @@ function setupVariablesInputs (canvas, state, draw, hasBulb) {
         state.pin = null; //and the pinned preview point
         applyFractalDefaults(state, previous); //each type starts from a good view (a bulb also sets power, c z, camera)
         helpers.syncTypeUI(state); //zoom field, c, c z, power slider, 3D-only controls
+        //the flying keys are ignored while a form control has focus, and the selector keeps it after a pick
+        fractalSelect.blur();
         draw();
     });
 
@@ -309,6 +449,7 @@ function setupVariablesInputs (canvas, state, draw, hasBulb) {
                 helpers.updateZoomUI(zoomInput, state); //garbage: change nothing, show the real value again
                 return;
             }
+            if (isFly(state.fractal)) return; //no zoom on a fly type (the field is hidden)
             if (isRaymarch(state.fractal)) {
                 //a bulb's "zoom" is the camera distance: magnification = default distance / distance
                 state.camBulb.dist = getFractal(state.fractal).defaults.cam.dist / mag;
@@ -440,6 +581,20 @@ function setupVariablesInputs (canvas, state, draw, hasBulb) {
     });
     helpers.updateCzUI(czInput, state);
 
+    //Scale: the Mandelbox's scale s in z -> s*fold(z) + p (the slider only shows for the Mandelbox).
+    //Values between -1 and 1 shrink the folded space every step and give a degenerate box (a blob
+    //or nothing), which is why the interesting ones are -3..-1 and 1..3.
+    let scaleInput = document.getElementById("scaleInput");
+    scaleInput.addEventListener("input", () => {
+        let value = parseFloat(scaleInput.value);
+        if (!isNaN(value)) {
+            state.scale = Math.max(-3, Math.min(3, value));
+            helpers.updateScaleUI(scaleInput, state);
+            draw();
+        }
+    });
+    helpers.updateScaleUI(scaleInput, state);
+
     //Saturation - only affects color mode (B&W ignores it too, but we don't block there)
     let saturationInput = document.getElementById("saturationInput");
     saturationInput.addEventListener("input", () => {
@@ -490,7 +645,7 @@ function setupMouseTrack (canvas, state, draw, preview) {
         const is3D = state.view3d || isRaymarch(state.fractal);
         //the middle button normally starts the browser's autoscroll; stop that in 3D only (2D is untouched)
         if (e.button === 1 && is3D) e.preventDefault();
-        moveDrag = e.button === 1 && e.ctrlKey && is3D;
+        moveDrag = e.button === 1 && e.ctrlKey && is3D && !isFly(state.fractal); //a fly type has no target to move
         dragging = true;
         panDrag = e.shiftKey || e.button === 2;
         lastX = e.clientX;
@@ -541,7 +696,11 @@ function setupMouseTrack (canvas, state, draw, preview) {
         e.preventDefault();
         const zoomAmount = 1.1;
         const factor = e.deltaY < 0 ? zoomAmount : 1 / zoomAmount; //scroll up = zoom in
-        if (isRaymarch(state.fractal)) {
+        if (isFly(state.fractal)) {
+            //the Mandelbox: the wheel sets the flying speed; the toast shows the new multiplier
+            flyWheelSpeed(state, e.deltaY);
+            helpers.showToast(`Fly speed ×${+state.camFly.speed.toFixed(2)}`);
+        } else if (isRaymarch(state.fractal)) {
             //a bulb: the wheel changes the camera DISTANCE (x1.1 per notch, scroll up = closer),
             //within the limits; that is the bulb's zoom
             state.camBulb.dist /= factor;
@@ -589,7 +748,8 @@ function setupMouseTrack (canvas, state, draw, preview) {
             });
         }
 
-        if(!state.pause && !drawScheduled && !dragging && !scrolling) {
+        //(a fly type: the mouse is for looking, so its position must not also change c)
+        if(!state.pause && !drawScheduled && !dragging && !scrolling && !isFly(state.fractal)) {
             drawScheduled = true;
             requestAnimationFrame(() => { // only update every screen refresh rate
                 state.c.re = (e.clientX - canvas.width / 2) / state.baseZoom;
@@ -609,7 +769,9 @@ function setupMouseTrack (canvas, state, draw, preview) {
                 //3D: a plain drag orbits the camera; Shift / right drag pans the region like 2D.
                 //A bulb has no region to pan: every drag orbits.
                 //Ctrl + middle-drag moves the camera instead (terrain and bulbs).
-                if (moveDrag) moveCameraBy(state, canvas, dx, dy);
+                //A fly type: every drag looks around (flyLook).
+                if (isFly(state.fractal)) flyLook(state, dx, dy);
+                else if (moveDrag) moveCameraBy(state, canvas, dx, dy);
                 else if (isRaymarch(state.fractal) || (state.view3d && !panDrag)) orbitBy(state, dx, dy);
                 else panBy(state, dx, dy);
     
@@ -663,7 +825,19 @@ function setupTouch (canvas, state, draw, preview) {
             return;
         }
 
-        if (g.n === 1 && (state.view3d || isRaymarch(state.fractal))) {
+        if (g.n === 1 && isFly(state.fractal)) {
+            //the Mandelbox: one finger looks around
+            flyLook(state, g.x - prev.x, g.y - prev.y);
+        } else if (g.n === 2 && isFly(state.fractal)) {
+            //the Mandelbox, two fingers: spreading them flies FORWARD (pinching in, back), and moving
+            //their midpoint strafes. Signs as for moveTarget: dragging the scene right means the camera
+            //moves left (-dx), dragging it down means the camera moves up (+dy; screen y grows down).
+            //100 px of gesture = one second of flying at the current speed.
+            const unit = flySpeedNow(state) / 100;
+            flyMove(state, 1, 0, 0, (g.dist - prev.dist) * unit);
+            flyMove(state, 0, 1, 0, -(g.x - prev.x) * unit);
+            flyMove(state, 0, 0, 1, (g.y - prev.y) * unit);
+        } else if (g.n === 1 && (state.view3d || isRaymarch(state.fractal))) {
             //3D (terrain or bulb): one finger orbits the camera. c does NOT follow the finger
             //here (unlike 2D), because the finger is needed for orbiting.
             orbitBy(state, g.x - prev.x, g.y - prev.y);

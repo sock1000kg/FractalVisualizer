@@ -15,7 +15,7 @@
 //the digits that matter and the image falls apart. Now the centre is stored as it is, and
 //the thing added to it, (sx - width/2) / zoom, is SMALL (a few pixels divided by a big zoom),
 //so it keeps all its digits. Only the centre needs extra precision (next milestone).
-import {getFractal, isRaymarch} from './fractals.js';
+import {getFractal, isRaymarch, isFly} from './fractals.js';
 
 //MAGNIFICATION: what the user sees. 1x is every type's own default view, so
 //magnification = zoom / default zoom. The range is limited below by 0.1 (zoomed far out) and
@@ -28,6 +28,8 @@ export const MAX_MAGNIFICATION = 1e15;
 //the magnification is the default camera distance divided by the current one (2x = half as far).
 export function magnification(state) {
     const f = getFractal(state.fractal);
+    //a fly type has no zoom (you fly instead; the zoom field is hidden), so it is always 1x
+    if (isFly(state.fractal)) return 1;
     if (isRaymarch(state.fractal)) return f.defaults.cam.dist / state.camBulb.dist;
     return state.zoom / f.defaults.zoom;
 }
@@ -52,15 +54,22 @@ export function setViewCenter(state, re, im) {
 //prevKey is the type we are coming from (state.fractal is already the new one). A bulb sets
 //its own power (8), c, cz and camera instead of zoom and centre. Leaving a bulb for a 2D type
 //puts the power back to 2: the bulbs' power 8 would make a 2D picture look odd, and the user
-//did not choose it for 2D. This is done ONLY when the previous type was a bulb, so switching
-//between two 2D types keeps whatever power the user set, as before.
+//did not choose it for 2D. This is done ONLY when the previous type was a raymarched one
+//(bulb or Mandelbox), so switching between two 2D types keeps whatever power the user set.
+//The Mandelbox has no power; it sets its scale and its fly camera (a copy of the default, the
+//position array included, so flying never changes the registry).
 export function applyFractalDefaults(state, prevKey = state.fractal) {
     const d = getFractal(state.fractal).defaults;
     state.c = { re: d.c.re, im: d.c.im }; //new object so the registry's defaults are never mutated
     if (isRaymarch(state.fractal)) {
         state.cz = d.cz;
-        state.power = d.power;
-        state.camBulb = { ...d.cam };
+        state.power = d.power ?? 2;
+        if (isFly(state.fractal)) {
+            state.scale = d.scale;
+            state.camFly = { ...d.camFly, pos: [...d.camFly.pos] };
+        } else {
+            state.camBulb = { ...d.cam };
+        }
         return;
     }
     if (isRaymarch(prevKey)) state.power = 2;

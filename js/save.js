@@ -28,6 +28,9 @@ export function saveSettings(state) {
         cam3d: { yaw: state.cam3d.yaw, pitch: state.cam3d.pitch, dist: state.cam3d.dist, target: [...(state.cam3d.target ?? DEFAULT_CAM.target)] },
         cz: state.cz,
         camBulb: { yaw: state.camBulb.yaw, pitch: state.camBulb.pitch, dist: state.camBulb.dist, target: [...(state.camBulb.target ?? BULB_TARGET)] },
+        //the Mandelbox: its scale and the fly camera (position, look angles and speed)
+        scale: state.scale,
+        camFly: { pos: [...state.camFly.pos], yaw: state.camFly.yaw, pitch: state.camFly.pitch, speed: state.camFly.speed },
     };
     localStorage.setItem("fractalPresets", JSON.stringify(saved));
     populateSavedDropdown();
@@ -88,6 +91,11 @@ export function loadSavedSettings(state, draw) {
     //on top of the Mandelbulb's own default framing
     state.cz = chosen.cz ?? 0;
     state.camBulb = { ...getFractal("mandelbulb").defaults.cam, ...chosen.camBulb };
+    //the Mandelbox (presets saved before it existed have neither): its scale and fly camera, on top
+    //of its default start. The position is copied so the preset object and the state never share it.
+    const flyDefaults = getFractal("mandelbox").defaults;
+    state.scale = chosen.scale ?? flyDefaults.scale;
+    state.camFly = { ...flyDefaults.camFly, ...chosen.camFly, pos: [...(chosen.camFly?.pos ?? flyDefaults.camFly.pos)] };
     //Where the view sits. New presets store the centre directly. Presets saved before that
     //stored pixel offsets (offset = centre * zoom - size/2), so convert back:
     //    centre = (offset + size/2) / zoom
@@ -106,8 +114,8 @@ export function loadSavedSettings(state, draw) {
         state.center = { re: d.re, im: d.im };
     }
 
-    //A bulb preset on the CPU renderer cannot be drawn (the selector disables the bulb options
-    //there), so fall back to Julia with its own defaults, and say so.
+    //A 3D preset (bulb or Mandelbox) on the CPU renderer cannot be drawn (the selector disables those
+    //options there), so fall back to Julia with its own defaults, and say so.
     const fellBack = !helpers.isTypeAvailable(state.fractal);
     if (fellBack) {
         const bulbName = getFractal(state.fractal).name;
@@ -142,6 +150,7 @@ export function loadSavedSettings(state, draw) {
     helpers.updateSmoothnessUI(smoothInput, state);
     helpers.updatePowerUI(powerInput, state);
     helpers.updateCzUI(document.getElementById("czInput"), state);
+    helpers.updateScaleUI(document.getElementById("scaleInput"), state);
     helpers.updateHeightUI(document.getElementById("heightInput"), state);
     helpers.updateView3DUI(state);
 
