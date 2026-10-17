@@ -8,6 +8,8 @@ export function draw(canvas, state){
     //read these once per draw instead of once per pixel
     const maxIter = state.maxIter;
     const fractal = getFractal(state.fractal);
+    //one reusable result object per draw, so no object is allocated per pixel
+    const out = {iter: 0, smooth: 0};
 
     //rows outside, columns inside: the image buffer is laid out row by row,
     //so this writes memory sequentially, which is friendlier to the CPU cache.
@@ -18,8 +20,8 @@ export function draw(canvas, state){
             let zx = (px + state.offsetX) / state.zoom;
             let zy = (py + state.offsetY) / state.zoom;
 
-            let iter = fractal.iterate(zx, zy, state, maxIter);
-            let [r, g, b] = colorize(iter, maxIter, state);
+            fractal.iterate(zx, zy, state, maxIter, out);
+            let [r, g, b] = colorize(out, maxIter, state);
 
             //single RGBA write for every mode
             let i = (py * canvas.width + px) * 4;
