@@ -52,9 +52,10 @@ export function updateMaxIterUI (iterInput, state) {
 }
 
 //Shows the warning line under the formula when the magnification passes the limit of the
-//current renderer (`limit`: 1e5 for WebGL floats, 1e13 for the CPU's doubles).
+//current renderer. `limit` is a number, or a function state => number (WebGL: about 1e11 or
+//1e5 depending on the state; the CPU's doubles: 1e13).
 export function updatePrecisionWarning(state, limit) {
-    document.getElementById("precisionWarning").classList.toggle("hidden", magnification(state) <= limit);
+    document.getElementById("precisionWarning").classList.toggle("hidden", magnification(state) <= (typeof limit === "function" ? limit(state) : limit));
 }
 
 //the two helpers below set both the slider and its value label

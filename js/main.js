@@ -13,11 +13,12 @@ canvas.height = window.innerHeight;
 //(getContext("2d") returns null after "webgl" was taken, and vice versa),
 //so we cannot try WebGL later and fall back on the same canvas.
 //Use ?renderer=cpu in the URL to force the CPU renderer.
-//Returns {canvas, drawFrame, renderer}: the canvas may be a fresh clone (see below),
+//Returns {canvas, drawFrame, limitFor, renderer}: the canvas may be a fresh clone (see below),
 //so always use the returned one.
 const forceCpu = new URLSearchParams(window.location.search).get("renderer") === "cpu";
 function makeRenderer(canvas, allowGL = true) {
   let drawFrame = null; //set when WebGL works
+  let limitFor = null; //WebGL only: state -> magnification where the picture stops being accurate
   let renderer = "cpu";
   if (allowGL && !forceCpu) {
     //preserveDrawingBuffer keeps the image after it is shown, which
@@ -25,7 +26,9 @@ function makeRenderer(canvas, allowGL = true) {
     const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true });
     if (gl) {
       try {
-        drawFrame = createGLRenderer(canvas, gl);
+        const gr = createGLRenderer(canvas, gl);
+        drawFrame = gr.draw;
+        limitFor = gr.limitFor;
         renderer = "webgl";
       } catch (e) {
         console.error("WebGL renderer failed, using CPU:", e);
@@ -38,7 +41,7 @@ function makeRenderer(canvas, allowGL = true) {
       }
     }
   }
-  return { canvas, drawFrame, renderer };
+  return { canvas, drawFrame, limitFor, renderer };
 }
 
 const main = makeRenderer(canvas);
@@ -50,10 +53,11 @@ const renderer = main.renderer;
 console.log(`Renderer: ${renderer}`);
 window.renderer = renderer; //for debugging in the console
 
-//The magnification where the picture stops being accurate. WebGL passes the view centre as a
-//32-bit float (~7 digits), so it goes blocky near 1e5x; the CPU uses doubles (~16 digits) and
-//holds until about 1e13x. The next milestone raises the WebGL limit. Used for the warning.
-const PRECISION_LIMIT = renderer === "webgl" ? 1e5 : 1e13;
+//The magnification where the picture stops being accurate, per state (used for the warning).
+//WebGL asks its renderer: about 1e11x with the double-float shader (whole powers), 1e5x with
+//plain floats (fractional powers, or a GPU where double-float is not reliable). The CPU uses
+//doubles (~16 digits) and holds until about 1e13x.
+const precisionLimit = (s) => main.limitFor ? main.limitFor(s) : 1e13;
 
 //the single draw function the rest of the app calls
 function render() {
@@ -191,7 +195,7 @@ const state = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
-  setupInputs(canvas, state, {render, renderPreview, precisionLimit: PRECISION_LIMIT});
+  setupInputs(canvas, state, {render, renderPreview, precisionLimit});
   render();
 });
 console.log("Main script loaded");
