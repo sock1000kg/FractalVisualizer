@@ -64,18 +64,23 @@ body {
     font-size: 0.85em;
     font-weight: 400;
     box-shadow: 0 0 10px #00000055;
+    /* long values wrap onto the next line instead of widening the panel */
+    max-width: min(460px, calc(100vw - 16px));
+    overflow-wrap: anywhere;
 }
 
 /* === PREVIEW INSET (BOTTOM LEFT) === */
-/* pointer-events: none lets every click, drag and touch fall through to the main canvas.
-   position: fixed keeps it at the bottom-left of the screen even though it is inside #topLeft
+/* pointer-events: auto (the parent #topLeft has none) makes the box clickable: clicking or
+   tapping it jumps into what it shows. The markers inside keep none. position: fixed keeps it at the bottom-left of the screen even though it is inside #topLeft
    (on phones it becomes part of the column instead, see the media query below). */
 #previewBox {
     position: fixed;
     left: 10px;
     bottom: 10px;
     z-index: 5;
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
+    width: fit-content; /* as wide as its content, which is capped by the label below */
 
     background: rgba(23, 23, 27, 0.8);
     padding: 6px;
@@ -90,8 +95,21 @@ body {
     display: block;
 }
 
+/* The label may never be wider than the canvas (240px; 160px on phones, see the media query),
+   so the box is always canvas width + padding, whatever the values or power are. */
 #previewLabel {
     margin-top: 4px;
+    max-width: 240px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 0.8em;
+}
+
+/* last line of the caption: small and dimmed */
+#previewLabel .hint {
+    opacity: 0.6;
+    font-size: 0.9em;
+    margin-top: 2px;
 }
 
 /* === CROSSHAIR MARKERS === */
@@ -111,8 +129,9 @@ body {
     filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
 }
 
-/* the small "c" label next to the main-canvas marker */
-#cMarker span {
+/* the small "c" / "p" label next to a main-canvas marker */
+#cMarker span,
+#pinMarker span {
     position: absolute;
     left: 100%;
     top: -100%;
@@ -324,6 +343,10 @@ input[type="number"] {
     #previewBox canvas {
         width: 160px;
         height: 107px;
+    }
+
+    #previewLabel {
+        max-width: 160px; /* same as the canvas width above */
     }
 
     /* iOS Safari zooms the page when focusing an input under 16px */

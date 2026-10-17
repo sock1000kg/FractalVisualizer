@@ -35,7 +35,8 @@
             <div id="formula"></div>
 
             <!-- Preview inset: the partner of the current type (Mandelbrot types: the Julia set
-                 under the cursor; Julia types: the Mandelbrot set with a crosshair at c) -->
+                 under the cursor; Julia types: the Mandelbrot set with a crosshair at c).
+                 Clicking or tapping the box jumps into what it shows. -->
             <div id="previewBox" class="hidden">
                 <canvas id="preview" width="240" height="160"></canvas>
                 <div id="previewMarker" class="marker hidden"></div>
@@ -45,6 +46,8 @@
 
         <!-- "c" crosshair: where a Julia -> Mandelbrot jump came from (positioned by JS) -->
         <div id="cMarker" class="marker hidden"><span>c</span></div>
+        <!-- "p" crosshair: the point a Mandelbrot-type preview is pinned to (positioned by JS) -->
+        <div id="pinMarker" class="marker hidden"><span>p</span></div>
 
         <div id="advanced">
             <details>
