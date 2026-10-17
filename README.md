@@ -13,10 +13,10 @@ Fractal Visualizer is a CPU-based fractal visualizer built with HTML5 and JavaSc
 - Save and delete presets
 - Simple mode for lower performace machines
 - Control the fractal's depth (the number of iterations), Saturation, Lightness
+- Different types of fractals: Julia, Mandelbrot and Burning Ship (for Mandelbrot and Burning Ship the mouse sets the starting point)
 
 ## Planned features
 - WebGL based rendering (reduce lag)
-- Different types of fractals
 
 ## Screenshots
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />

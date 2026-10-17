@@ -13,10 +13,10 @@ Fractal Visualizer là một công cụ tạo fractal chạy bằng CPU, đượ
 - Lưu và xoá dữ liệu của các fractal
 - Mode "Simple" cho các máy yếu hơn
 - Cho phép người dùng thay đổi độ sâu, độ đậm, độ sáng của fractal
+- Nhiều loại fractal: Julia, Mandelbrot và Burning Ship (với Mandelbrot và Burning Ship, chuột quyết định điểm xuất phát)
 
 ## Tính năng trong tương lai
 - Vẽ fractal bằng WebGl (giảm lag)
-- Các loại fractal khác nhau
 
 ## Hình ảnh
 <img width="1920" height="1080" alt="Funky Pink" src="https://github.com/user-attachments/assets/2ff3a9d5-3f40-4ecb-b6bc-1a14bc7c04e4" />
