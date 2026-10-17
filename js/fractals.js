@@ -21,8 +21,11 @@
 //            get the preview inset (the partner, drawn small) and click-to-jump in both
 //            directions. Both entries of a pair must name each other. Types added later
 //            can opt in with it.
-//   formula: (state) => text of the equation with the live values filled in. Pass a
-//            different state (e.g. the inset's) to get that view's equation.
+//   formula: (state) => {title, eq, vars}: the equation as three short parts, with the live
+//            values filled in. title is the name, eq the iteration, vars what the pixel and
+//            state.c mean. The UI puts each part on its own line (so long values wrap instead
+//            of stretching a box). Pass a different state (e.g. the inset's) to get that
+//            view's equation.
 //   glsl:    the same fractal written as two GLSL snippets for the WebGL renderer
 //     init -> sets the starting z and the constant k, from p (the pixel as a
 //             complex number) and uC (state.c)
@@ -281,7 +284,7 @@ export const FRACTALS = {
         defaults: { c: { re: -0.7, im: 0.27015 }, center: { re: 0, im: 0 }, zoom: 300 },
         kind: "julia",
         partner: "mandelbrot",
-        formula: (s) => `Julia: z → z${formatPower(s.power)} + c   (z₀ = pixel, c = ${formatComplex(s.c)})`,
+        formula: (s) => ({title: "Julia", eq: `z → z${formatPower(s.power)} + c`, vars: `z₀ = pixel · c = ${formatComplex(s.c)}`}),
         //z -> z^n + c, starting at the pixel
         glsl: {
             init: "z = p; k = uC;",
@@ -296,7 +299,7 @@ export const FRACTALS = {
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.5, im: 0 }, zoom: 300 },
         kind: "mandelbrot",
         partner: "julia", //the inset and click-to-jump use the Julia type
-        formula: (s) => `Mandelbrot: z → z${formatPower(s.power)} + p   (p = pixel, z₀ = ${formatComplex(s.c)})`,
+        formula: (s) => ({title: "Mandelbrot", eq: `z → z${formatPower(s.power)} + p`, vars: `p = pixel · z₀ = ${formatComplex(s.c)}`}),
         //z -> z^n + p, starting at the mouse-controlled uC
         glsl: {
             init: "z = uC; k = p;",
@@ -310,7 +313,7 @@ export const FRACTALS = {
         defaults: { c: { re: 0, im: 0 }, center: { re: -0.4, im: -0.5 }, zoom: 250 },
         kind: "mandelbrot",
         partner: "burningShipJulia",
-        formula: (s) => `Burning Ship: z → (|Re z| + i|Im z|)${formatPower(s.power)} + p   (p = pixel, z₀ = ${formatComplex(s.c)})`,
+        formula: (s) => ({title: "Burning Ship", eq: `z → (|Re z| + i|Im z|)${formatPower(s.power)} + p`, vars: `p = pixel · z₀ = ${formatComplex(s.c)}`}),
         //same as Mandelbrot, with abs() of both parts before the power
         glsl: {
             init: "z = uC; k = p;",
@@ -324,7 +327,7 @@ export const FRACTALS = {
         defaults: { c: { re: -0.5, im: -0.5 }, center: { re: 0, im: 0 }, zoom: 300 },
         kind: "julia",
         partner: "burningShip",
-        formula: (s) => `Burning Ship Julia: z → (|Re z| + i|Im z|)${formatPower(s.power)} + c   (z₀ = pixel, c = ${formatComplex(s.c)})`,
+        formula: (s) => ({title: "Burning Ship Julia", eq: `z → (|Re z| + i|Im z|)${formatPower(s.power)} + c`, vars: `z₀ = pixel · c = ${formatComplex(s.c)}`}),
         //like Julia (constant uC, start at the pixel) with abs() before the power
         glsl: {
             init: "z = p; k = uC;",

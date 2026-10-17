@@ -3,6 +3,7 @@ import {getFractal, FRACTALS, formatComplex} from './fractals.js';
 import {complexToScreen} from './view.js';
 import {createGLRenderer} from './glRenderer.js';
 import {setupInputs} from './inputs.js';
+import {setLines} from './helpers.js';
 
 let canvas = document.getElementById("canvas");
 canvas.width = window.innerWidth;
@@ -63,6 +64,8 @@ const prev = makeRenderer(previewCanvas, renderer === "webgl");
 previewCanvas = prev.canvas;
 const previewLabel = document.getElementById("previewLabel");
 const previewMarker = document.getElementById("previewMarker");
+//touch screens have no hover or right-click, so the hint line words things differently there
+const COARSE_POINTER = window.matchMedia("(pointer: coarse)").matches;
 
 //Draws the inset: the PARTNER of the main type (see kind / partner in fractals.js).
 //Colours, modes, smoothness, power and iterations come from the main state; the rest is
@@ -103,13 +106,26 @@ function renderPreview(p) {
   if (prev.drawFrame) prev.drawFrame(previewState);
   else draw(previewCanvas, previewState);
 
+  //Caption, one <div> per line: "title: equation", then the meaning of the variables, then
+  //what the link to the main view is, then a dimmed hint about clicking.
+  const f = partner.formula(previewState);
+  const lines = [[`${f.title}: ${f.eq}`], [f.vars]];
   if (main.kind === "julia") {
-    previewLabel.textContent = `${partner.formula(previewState)}   · marker = c = ${formatComplex(state.c)}`;
+    //The Mandelbrot image NEVER depends on c: it is a map of ALL the c values at once. So it
+    //does not change while c moves; only the crosshair does. It marks the p that equals your c.
+    lines.push([`✛ = p equal to your c (${formatComplex(state.c)})`]);
     placePreviewMarker(previewState);
   } else {
-    previewLabel.textContent = partner.formula(previewState);
+    //the inset (a Julia set) is drawn for the constant c = p, the point under the cursor
+    //or, after a click on the canvas, the pinned point
+    const which = state.pin ? "pinned p" : "p under the cursor";
+    lines.push([`c = ${which} (${formatComplex(p)})`]);
     previewMarker.classList.add("hidden");
   }
+  lines.push([COARSE_POINTER ? "tap here to open"
+    : main.kind === "julia" ? "click canvas to freeze c · click here to open"
+    : "click canvas to pin · click here to open", "hint"]);
+  setLines(previewLabel, lines);
 }
 
 //Puts the crosshair over the inset at the point state.c. The inset is a WebGL canvas, so we
@@ -159,6 +175,11 @@ const state = {
   //where a Julia -> Mandelbrot jump came from: the complex point {re, im} that gets a "c"
   //crosshair on the main canvas, or null. Not saved in presets (see inputs.js)
   markerPoint: null,
+
+  //Mandelbrot types: the complex point {re, im} the inset is pinned to by a click on the
+  //canvas, or null while the inset follows the cursor. Cleared by Esc, another click, a type
+  //change, a preset or a jump. Not saved in presets.
+  pin: null,
 
   //modes
   bw: false,
