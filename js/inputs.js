@@ -1,10 +1,12 @@
 import * as helpers from './helpers.js';
+import {FRACTALS} from './fractals.js';
+import {getViewCenter, setViewCenter, applyFractalDefaults} from './view.js';
 import {saveSettings, populateSavedDropdown, loadSavedSettings} from './save.js';
 
 export function setupInputs(canvas, state, draw){
     setupButtons(canvas, state, draw);
     setupMouseTrack(canvas, state, draw);
-    setupVariablesInputs(state, draw);
+    setupVariablesInputs(canvas, state, draw);
     setupWindowResize(canvas, state, draw);
     populateSavedDropdown();
 }
@@ -110,7 +112,24 @@ function setupButtons(canvas, state, draw) {
 }
 
 
-function setupVariablesInputs (state, draw) {
+function setupVariablesInputs (canvas, state, draw) {
+    //Fractal type: options come from the registry, so new fractals show up automatically
+    let fractalSelect = document.getElementById("fractalSelect");
+    for (const key in FRACTALS) {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = FRACTALS[key].name;
+        fractalSelect.appendChild(option);
+    }
+    helpers.updateFractalUI(fractalSelect, state);
+    fractalSelect.addEventListener("change", () => {
+        state.fractal = fractalSelect.value;
+        applyFractalDefaults(canvas, state); //each type starts from a good view
+        helpers.updateZoomUI(document.getElementById("zoomInput"), state);
+        helpers.updateCUI(document.getElementById("cImInput"), document.getElementById("cReInput"), state);
+        draw();
+    });
+
     //Zoom input
     let zoomInput = document.getElementById("zoomInput");
     zoomInput.addEventListener("keydown", (e) => {
@@ -119,9 +138,12 @@ function setupVariablesInputs (state, draw) {
             if (isNaN(zoomValue)) return;
             
             zoomValue = Math.max(50, Math.min(1500, zoomValue));
+            //keep the point at the screen centre fixed while the zoom changes
+            const center = getViewCenter(canvas, state);
             state.zoom = zoomValue;
             if(zoomValue < 50) state.zoom = 50;
             if(zoomValue > 1500) state.zoom = 1500;
+            setViewCenter(canvas, state, center.re, center.im);
             draw();
         }
     });
@@ -256,6 +278,8 @@ function setupMouseTrack (canvas, state, draw) {
         scrolling = true;
         e.preventDefault();
         const zoomAmount = 1.1;
+        //keep the point at the screen centre fixed while the zoom changes
+        const center = getViewCenter(canvas, state);
         if(e.deltaY < 0) {
             //Zoom in
             state.zoom *= zoomAmount;
@@ -266,6 +290,7 @@ function setupMouseTrack (canvas, state, draw) {
             state.zoom /= zoomAmount;
             helpers.updateZoomUI(zoomInput, state);
         }
+        setViewCenter(canvas, state, center.re, center.im);
         draw();
 
         //Timer to count as "end of scroll"
@@ -316,11 +341,11 @@ function setupMouseTrack (canvas, state, draw) {
 function setupWindowResize (canvas, state, draw) {
     //Resize the canvas according to the window
     window.addEventListener("resize", () => {
+        //remember the centre, resize, then restore it so the view doesn't jump
+        const center = getViewCenter(canvas, state);
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-
-        state.offsetX = -canvas.width / 2;
-        state.offsetY = -canvas.height / 2;
+        setViewCenter(canvas, state, center.re, center.im);
         draw();
     });
 }
